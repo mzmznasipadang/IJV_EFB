@@ -48,6 +48,19 @@ test("navlog legs keep fix order and distinguish zero from missing data", async 
   assert.deepEqual(navlogLegs(null), [])
 })
 
+test("navlog handles SimBrief v2 fix arrays and alternate routes", async () => {
+  const { navlogLegs, alternateNavlogLegs } = await import("./dispatch.js")
+  const main = [{ ident: "WIII", distance: "0" }, { ident: "WIPP", distance: "110" }]
+  const firstAlternate = [{ ident: "WIPP", distance: "0" }, { ident: "WIKK", distance: "96" }]
+  const secondAlternate = [{ ident: "WIPT", distance: "220" }]
+  assert.deepEqual(navlogLegs(main, "WIII").map(leg => leg.ident), ["WIII", "WIPP"])
+  for (const data of [[firstAlternate, secondAlternate], [{ fix: firstAlternate }, { fix: secondAlternate }]]) {
+    assert.deepEqual(alternateNavlogLegs(data, "WIPP").map(legs => legs.map(leg => leg.ident)), [["WIPP", "WIKK"], ["WIPT"]])
+  }
+  assert.deepEqual(alternateNavlogLegs(firstAlternate, "WIPP"), alternateNavlogLegs({ fix: firstAlternate }, "WIPP"))
+  assert.equal(alternateNavlogLegs([firstAlternate], "WIPP")[0].at(-1).totalDistance, 96)
+})
+
 test("windMatrix groups by stage, skips TOC/TOD, picks levels and nearest column", async () => {
   const { windMatrix } = await import("./dispatch.js")
   const level = (altitude, wind_dir, wind_spd, oat) => ({ altitude: String(altitude), wind_dir, wind_spd, oat })

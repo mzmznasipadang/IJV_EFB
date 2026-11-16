@@ -88,7 +88,7 @@ function navlogNumber(fix, key) {
 }
 
 export function navlogLegs(log, departure) {
-  const fixes = [log?.fix ?? []].flat().filter(fix => field(fix, "ident"))
+  const fixes = [log?.fix ?? log ?? []].flat().filter(fix => field(fix, "ident"))
   let totalDistance = 0
   return fixes.map((fix, index) => {
     const ident = field(fix, "ident")
@@ -107,6 +107,12 @@ export function navlogLegs(log, departure) {
       fuel: navlogNumber(fix, "fuel_plan_onboard"),
     }
   })
+}
+
+export function alternateNavlogLegs(logs, departure) {
+  // V2 supplies an array of routes. Also accept one route supplied directly.
+  const routes = Array.isArray(logs) && !logs.some(fix => field(fix, "ident")) ? logs : [logs]
+  return routes.map(log => navlogLegs(log, departure)).filter(legs => legs.length)
 }
 
 // Ported from IJV dispatch formatWindMatrixRow: same 7 levels and stage rules as the PDF wind page

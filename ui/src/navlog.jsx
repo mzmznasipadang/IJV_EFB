@@ -1,5 +1,5 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { field, navlogLegs } from "./dispatch"
+import { alternateNavlogLegs, field, navlogLegs } from "./dispatch"
 
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
 const formatNumber = value => value == null ? "—" : number.format(value)
@@ -53,8 +53,7 @@ export function Navlog({ flight, airports }) {
   const rawUnits = String(field(flight.params, "units") ?? "").toLowerCase()
   const units = /^kgs?$/.test(rawUnits) ? "kg" : /^lbs?$/.test(rawUnits) ? "lb" : null
   const primary = navlogLegs(flight.navlog, departure)
-  const alternates = [flight.alternate_navlog ?? []].flat()
-    .map(log => navlogLegs(log, destination)).filter(legs => legs.length)
+  const alternates = alternateNavlogLegs(flight.alternate_navlog, destination)
 
   return <>
     {(primary.length > 0 || alternates.length > 0) && <p className="secondary-copy md:hidden">Scroll the table sideways for more columns.</p>}
