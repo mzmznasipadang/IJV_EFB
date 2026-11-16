@@ -179,7 +179,7 @@ function AcarsPanel({ flight, airports }) {
   </section>
 }
 
-export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars }) {
+export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars, openAipAvailable }) {
   const [username, setUsername] = useState(simbriefId || "")
   const [dispatchUsername, setDispatchUsername] = useState("")
   const [importOpen, setImportOpen] = useState(false)
@@ -340,7 +340,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
           {acars && <AcarsPanel key={field(flight.params, "request_id") || field(flight.params, "time_generated")} flight={flight} airports={airports} />}
         </div>
       </TabsContent>
-      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog flight={flight} airports={airports} /></TabsContent>
+      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog flight={flight} airports={airports} openAipAvailable={openAipAvailable} /></TabsContent>
       <TabsContent className="mt-3 space-y-4" value="ofp">
         <ExternalButton href="https://dispatch.simbrief.com/options/edit">Edit in SimBrief</ExternalButton>
         {field(flight.text, "plan_html") ? <iframe className="viewer bg-white" sandbox="" title="SimBrief operational flight plan" srcDoc={field(flight.text, "plan_html")} /> :

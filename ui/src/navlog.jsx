@@ -1,5 +1,7 @@
+import { useMemo } from "react"
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { alternateNavlogLegs, field, navlogLegs } from "./dispatch"
+import { alternateNavlogLegs, field, navlogLegs, navlogMapRoutes } from "./dispatch"
+import { NavlogMap } from "./navlog-map"
 
 const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 })
 const formatNumber = value => value == null ? "—" : number.format(value)
@@ -47,16 +49,23 @@ function RouteTable({ title, legs, units }) {
   </div>
 }
 
-export function Navlog({ flight, airports }) {
+export function Navlog({ flight, airports, openAipAvailable }) {
   const departure = field(flight.origin, "icao_code")
   const destination = field(flight.destination, "icao_code")
   const rawUnits = String(field(flight.params, "units") ?? "").toLowerCase()
   const units = /^kgs?$/.test(rawUnits) ? "kg" : /^lbs?$/.test(rawUnits) ? "lb" : null
-  const primary = navlogLegs(flight.navlog, departure)
-  const alternates = alternateNavlogLegs(flight.alternate_navlog, destination)
+  const { primary, alternates, mapRoutes } = useMemo(() => {
+    const primary = navlogLegs(flight.navlog, departure)
+    const alternates = alternateNavlogLegs(flight.alternate_navlog, destination)
+    return { primary, alternates, mapRoutes: navlogMapRoutes(primary, alternates) }
+  }, [flight, departure, destination])
+  const hasWaypoints = primary.length > 0 || alternates.length > 0
 
   return <>
-    {(primary.length > 0 || alternates.length > 0) && <p className="secondary-copy md:hidden">Scroll the table sideways for more columns.</p>}
+    {hasWaypoints && <>
+      <NavlogMap routes={mapRoutes} openAipAvailable={openAipAvailable} />
+      <p className="secondary-copy md:hidden">Scroll the table sideways for more columns.</p>
+    </>}
     {primary.length ? <RouteTable title={`Primary route · ${departure} → ${destination}`} legs={primary} units={units} /> :
       <p className="panel secondary-copy p-5">SimBrief supplied no waypoint data for the primary route.</p>}
     {alternates.map((legs, index) => {

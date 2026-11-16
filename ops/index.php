@@ -56,6 +56,47 @@ if (isset($_GET['generate_pdf']) && isset($_GET['username'])) {
 // Retrieve Profile values populated by landing page SSO response
 $pilotName = "Capt. " . ($_SESSION['pilot_name'] ?? 'Pilot');
 $pilotCallsign = $_SESSION['pilot_callsign'] ?? 'IJV';
+$openAipKey = trim((string)getenv('OPENAIP_API_KEY'));
+
+if (isset($_GET['openaip_tile'])) {
+    session_write_close();
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        header('Allow: GET');
+        http_response_code(405);
+        exit;
+    }
+    $tile = $_GET['openaip_tile'];
+    if (!is_string($tile) || !preg_match('/\A(\d{1,2})\/(\d{1,6})\/(\d{1,6})\z/', $tile, $coords)) {
+        http_response_code(400);
+        exit;
+    }
+    [, $z, $x, $y] = array_map('intval', $coords);
+    if ($z < 2 || $z > 19 || $x >= (1 << $z) || $y >= (1 << $z)) {
+        http_response_code(400);
+        exit;
+    }
+    if ($openAipKey === '') {
+        http_response_code(503);
+        exit;
+    }
+
+    $context = stream_context_create(['http' => [
+        'timeout' => 6,
+        'follow_location' => 0,
+        'header' => ['X-OpenAIP-API-Key: ' . $openAipKey, 'Accept: image/png'],
+    ]]);
+    $maxBytes = 1024 * 1024;
+    $png = @file_get_contents("https://api.tiles.openaip.net/api/data/openaip/$z/$x/$y.png", false, $context, 0, $maxBytes + 1);
+    if ($png === false || strlen($png) > $maxBytes || !str_starts_with($png, "\x89PNG\r\n\x1a\n")) {
+        http_response_code(502);
+        exit;
+    }
+    header('Content-Type: image/png');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, max-age=3600');
+    echo $png;
+    exit;
+}
 
 // International SIGMETs (aviationweather.gov isigmet excludes US domestic), cached 5 min for all crews
 if (isset($_GET['sigmets'])) {
@@ -243,6 +284,7 @@ if (!$uiEntry) {
         'pilotCallsign' => $pilotCallsign,
         'simbriefId' => $_SESSION['simbrief_id'] ?? '',
         'acars' => ($_SESSION['acars_pref'] ?? '') === 'hoppie' && getenv('HOPPIE_LOGON'),
+        'openAipAvailable' => $openAipKey !== '',
         'charts' => $chartsStructure,
         'checklists' => $structure,
     ], JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE) ?></script>

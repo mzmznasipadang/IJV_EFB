@@ -37,7 +37,7 @@ test("navlog legs keep fix order and distinguish zero from missing data", async 
   assert.deepEqual(legs.map(leg => leg.totalDistance), [0, 20.5, 30.5, null, null])
   assert.deepEqual(legs[1], {
     ident: "TOC", airway: "DCT", altitude: 31000, track: 5,
-    distance: 20.5, totalDistance: 20.5, elapsed: 600, fuel: 5000,
+    distance: 20.5, totalDistance: 20.5, elapsed: 600, fuel: 5000, position: null,
   })
   assert.equal(legs[0].elapsed, 0)
   assert.equal(legs[0].track, null)
@@ -59,6 +59,24 @@ test("navlog handles SimBrief v2 fix arrays and alternate routes", async () => {
   }
   assert.deepEqual(alternateNavlogLegs(firstAlternate, "WIPP"), alternateNavlogLegs({ fix: firstAlternate }, "WIPP"))
   assert.equal(alternateNavlogLegs([firstAlternate], "WIPP")[0].at(-1).totalDistance, 96)
+})
+
+test("navlog map preserves coordinate gaps and wraps routes at the date line", async () => {
+  const { navlogLegs, navlogMapRoutes } = await import("./dispatch.js")
+  const primary = navlogLegs([
+    { ident: "WEST", pos_lat: "0", pos_long: { value: "179" } },
+    { ident: "EAST", pos_lat: "1", pos_long: "-179" },
+    { ident: "MISSING", pos_lat: "  ", pos_long: "0" },
+    { ident: "INVALID", pos_lat: "91", pos_long: "-177" },
+    { ident: "ARR", pos_lat: "3", pos_long: "-178" },
+  ])
+  const alternate = navlogLegs([{ ident: "ALT", pos_lat: 2, pos_long: -176 }])
+  assert.deepEqual(primary.map(leg => leg.position), [[0, 179], [1, -179], null, null, [3, -178]])
+  assert.deepEqual(navlogMapRoutes(primary, [alternate]).map(({ alternate, segments }) => ({ alternate, segments })), [
+    { alternate: false, segments: [[[0, 179], [1, 181]], [[3, 182]]] },
+    { alternate: true, segments: [[[2, 184]]] },
+  ])
+  assert.deepEqual(navlogMapRoutes([], [primary.slice(2, 4)]), [])
 })
 
 test("windMatrix groups by stage, skips TOC/TOD, picks levels and nearest column", async () => {

@@ -194,7 +194,7 @@ function App() {
       <div hidden={active !== "home"}><Home flight={flight} navigate={navigate} openFlightView={openFlightView}
         openProfile={() => { window.scrollTo(0, 0); setAccountOpen(true) }} /></div>
       <div hidden={active !== "flight"}><FlightFolder flight={flight} setFlight={activateFlight} airports={airports} simbriefId={config.simbriefId} acars={config.acars}
-        openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} /></div>
+        openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} openAipAvailable={config.openAipAvailable} /></div>
       <div hidden={active !== "weather"}><Weather airport={weatherAirport} setAirport={setWeatherAirport} flightAirports={airports} /></div>
       <div hidden={active !== "charts"}><Charts catalog={config.charts} airport={chartAirport} setAirport={setChartAirport}
         airports={airports} mode={chartMode} setMode={setChartMode} /></div>

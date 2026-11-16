@@ -87,6 +87,12 @@ function navlogNumber(fix, key) {
   return Number.isFinite(number) ? number : null
 }
 
+function navlogPosition(fix) {
+  const lat = navlogNumber(fix, "pos_lat")
+  const lon = navlogNumber(fix, "pos_long")
+  return lat != null && lon != null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? [lat, lon] : null
+}
+
 export function navlogLegs(log, departure) {
   const fixes = [log?.fix ?? log ?? []].flat().filter(fix => field(fix, "ident"))
   let totalDistance = 0
@@ -105,6 +111,7 @@ export function navlogLegs(log, departure) {
       totalDistance,
       elapsed: navlogNumber(fix, "time_total"),
       fuel: navlogNumber(fix, "fuel_plan_onboard"),
+      position: navlogPosition(fix),
     }
   })
 }
@@ -113,6 +120,34 @@ export function alternateNavlogLegs(logs, departure) {
   // V2 supplies an array of routes. Also accept one route supplied directly.
   const routes = Array.isArray(logs) && !logs.some(fix => field(fix, "ident")) ? logs : [logs]
   return routes.map(log => navlogLegs(log, departure)).filter(legs => legs.length)
+}
+
+export function navlogMapRoutes(primary, alternates) {
+  let destinationLongitude = null
+  return [primary, ...alternates].flatMap((legs, index) => {
+    let longitude = destinationLongitude
+    let segment
+    const segments = []
+    const waypoints = []
+    for (const [fixIndex, leg] of legs.entries()) {
+      if (!leg.position) {
+        segment = null
+        continue
+      }
+      const [lat, rawLongitude] = leg.position
+      // Keep adjacent fixes in the nearest world copy when a leg crosses the date line.
+      longitude = longitude == null ? rawLongitude : rawLongitude + 360 * Math.round((longitude - rawLongitude) / 360)
+      const position = [lat, longitude]
+      if (!segment) {
+        segment = []
+        segments.push(segment)
+      }
+      segment.push(position)
+      waypoints.push({ ident: leg.ident, position, endpoint: fixIndex === 0 || fixIndex === legs.length - 1 })
+    }
+    destinationLongitude ??= longitude
+    return waypoints.length ? [{ alternate: index > 0, segments, waypoints }] : []
+  })
 }
 
 // Ported from IJV dispatch formatWindMatrixRow: same 7 levels and stage rules as the PDF wind page

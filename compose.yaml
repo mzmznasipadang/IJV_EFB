@@ -14,6 +14,7 @@ services:
       # Hoppie ACARS logon for the ops station; unset = ACARS features hidden
       HOPPIE_LOGON: "${HOPPIE_LOGON:-}"
       HOPPIE_STATION: "${HOPPIE_STATION:-IJVOPS}"
+      OPENAIP_API_KEY: "${OPENAIP_API_KEY:-}"
     volumes:
       - sessions:/var/lib/php/sessions
       - acars:/var/lib/ijv-acars

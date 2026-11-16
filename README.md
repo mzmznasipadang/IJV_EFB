@@ -45,8 +45,11 @@ The EFB listens on `127.0.0.1:8081`. Put a reverse proxy with TLS in front of it
 | `OFP_RENDER_TOKEN` | empty | Renderer token; leave empty to use Dompdf only |
 | `HOPPIE_LOGON` | empty | Hoppie logon code; leave empty to hide the ACARS features |
 | `HOPPIE_STATION` | `IJVOPS` | Callsign that telexes are sent from |
+| `OPENAIP_API_KEY` | empty | Enables the OpenAIP aviation overlay in Navlog. Create a key under API Clients in your OpenAIP profile and set it in the server's `.env`. |
 
 Keep `.env` out of git. The Hoppie logon never reaches the browser.
+
+The optional Navlog overlay uses the [OpenAIP Tiles API](https://docs.openaip.net/?urls.primaryName=Tiles%20API) under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The EFB serves the tiles through an authenticated endpoint and keeps the OpenAIP key server-side.
 
 ## Production deployment
 
