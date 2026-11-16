@@ -1,0 +1,16 @@
+name: Deploy IJV EFB
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  deploy:
+    runs-on: ijv-efb-production
+    steps:
+      - name: Deploy the pushed revision
+        env:
+          REVISION: ${{ gitea.sha }}
+        run: sudo -n /usr/local/sbin/deploy-ijv-efb "$REVISION"

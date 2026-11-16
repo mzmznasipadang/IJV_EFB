@@ -48,6 +48,12 @@ The EFB listens on `127.0.0.1:8081`. Put a reverse proxy with TLS in front of it
 
 Keep `.env` out of git. The Hoppie logon never reaches the browser.
 
+## Production deployment
+
+Pushes to `main` on Gitea deploy to `naspad-server` through the repository runner labeled `ijv-efb-production`. The workflow passes the commit SHA to `/usr/local/sbin/deploy-ijv-efb`, installed from `docker/deploy.sh` by the server administrator. If that script changes, update the installed copy on the server before relying on the new behavior.
+
+The script reads the local Gitea repository, builds the revision, and waits for Compose to report the services ready. It keeps using `/opt/ijv-efb/.env` and the existing `ijv-efb` project volumes and network. The last successful release is at `/opt/ijv-efb/current`.
+
 ## Development
 
 ```bash

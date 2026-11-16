@@ -234,6 +234,24 @@ body:has(.home-workspace) { background: var(--home-background); }
 
 .dock-button { @apply h-12 min-w-[3.25rem] flex-col gap-1 rounded-sm px-2 text-[0.6875rem] text-primary; }
 .dock-button[aria-current="page"] { background: var(--dock-active); color: #15213d; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace > :not([hidden]) {
+    animation: workspace-enter 180ms ease-out;
+  }
+  .launcher-tile, .dock-button {
+    transition: background-color 120ms, border-color 120ms, color 120ms, box-shadow 120ms, scale 120ms ease-out;
+  }
+  .launcher-tile:active:not(:disabled), .dock-button:active {
+    scale: 0.97;
+  }
+}
+
+@keyframes workspace-enter {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
+}
+
 .module-tabs { @apply min-h-11 rounded-sm border bg-card p-1; }
 .module-tabs [role="tab"][data-state="active"] { @apply border-transparent bg-primary text-primary-foreground shadow-none; }
 .module-tabs [role="tab"][data-state="inactive"]:not(:hover) { @apply text-muted-foreground; }

@@ -3,6 +3,7 @@
 !docker/
 !docker/efb.conf
 !docker/efb.ini
+!docker/hoppie_poll.php
 !index.php
 !image_0.png
 !image_1.png
@@ -14,6 +15,7 @@
 !ops/
 !ops/index.php
 !ops/generate_pdf.php
+!ops/hoppie.php
 !ops/dompdf/
 !ops/dompdf/autoload.inc.php
 !ops/dompdf/vendor/

@@ -1,6 +1,7 @@
 services:
   web:
     build: .
+    image: "ijv-efb-web:${EFB_IMAGE_TAG:-latest}"
     restart: unless-stopped
     ports:
       - "127.0.0.1:${EFB_PORT:-8081}:80"
@@ -25,6 +26,7 @@ services:
   # Single IJVOPS poller: replies to WX requests and logs OOOI/progress for the EFB
   hoppie-poller:
     build: .
+    image: "ijv-efb-hoppie-poller:${EFB_IMAGE_TAG:-latest}"
     restart: unless-stopped
     user: www-data
     command: ["php", "/usr/local/lib/ijv/hoppie_poll.php"]
