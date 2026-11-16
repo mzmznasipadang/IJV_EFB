@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronLeft, ClipboardList, CloudSun, House, LogOut, Map, Monitor, Moon, Sun, UserCircle, Wifi, WifiOff } from "lucide-react"
 import { createRoot } from "react-dom/client"
 import { Button } from "@/components/ui/button"
@@ -140,7 +140,7 @@ function App() {
   const [chartAirport, setChartAirport] = useState("")
   const [chartMode, setChartMode] = useState("ijv")
   const [manifest, setManifest] = useState([])
-  const airports = flightAirports(flight)
+  const airports = useMemo(() => flightAirports(flight), [flight])
 
   function navigate(id) {
     setPages(previous => id === "home" ? ["home"] :

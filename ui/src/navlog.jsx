@@ -63,7 +63,7 @@ export function Navlog({ flight, airports, openAipAvailable }) {
 
   return <>
     {hasWaypoints && <>
-      <NavlogMap routes={mapRoutes} openAipAvailable={openAipAvailable} />
+      <NavlogMap routes={mapRoutes} flight={flight} airports={airports} openAipAvailable={openAipAvailable} />
       <p className="secondary-copy md:hidden">Scroll the table sideways for more columns.</p>
     </>}
     {primary.length ? <RouteTable title={`Primary route · ${departure} → ${destination}`} legs={primary} units={units} /> :

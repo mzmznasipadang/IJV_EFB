@@ -255,6 +255,9 @@ body:has(.home-workspace) { background: var(--home-background); }
 .module-tabs { @apply min-h-11 rounded-sm border bg-card p-1; }
 .module-tabs [role="tab"][data-state="active"] { @apply border-transparent bg-primary text-primary-foreground shadow-none; }
 .module-tabs [role="tab"][data-state="inactive"]:not(:hover) { @apply text-muted-foreground; }
+.navlog-briefing-popup .leaflet-popup-content {
+  max-width: min(320px, calc(100vw - 8rem));
+}
 .weather-surface {
   @apply overflow-hidden rounded-sm border px-4 py-4 text-white sm:px-6 sm:py-5;
   background: linear-gradient(125deg, #2c4357, #466b89);

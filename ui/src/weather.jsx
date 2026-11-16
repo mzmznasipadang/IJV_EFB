@@ -17,13 +17,13 @@ const models = {
   icon_global: "DWD ICON Global",
 }
 
-async function getJSON(url, signal) {
+export async function getJSON(url, signal) {
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error("Weather data is temporarily unavailable.")
   return response.json()
 }
 
-async function getAirportData(airport, type, signal) {
+export async function getAirportData(airport, type, signal) {
   const query = new URLSearchParams({ proxy_weather: "1", type, icao: airport })
   const rows = await getJSON(`/ops/index.php?${query}`, signal)
   return rows?.[0]

@@ -122,6 +122,10 @@ export function alternateNavlogLegs(logs, departure) {
   return routes.map(log => navlogLegs(log, departure)).filter(legs => legs.length)
 }
 
+export function longitudeNear(longitude, reference) {
+  return reference == null ? longitude : longitude + 360 * Math.round((reference - longitude) / 360)
+}
+
 export function navlogMapRoutes(primary, alternates) {
   let destinationLongitude = null
   return [primary, ...alternates].flatMap((legs, index) => {
@@ -136,7 +140,7 @@ export function navlogMapRoutes(primary, alternates) {
       }
       const [lat, rawLongitude] = leg.position
       // Keep adjacent fixes in the nearest world copy when a leg crosses the date line.
-      longitude = longitude == null ? rawLongitude : rawLongitude + 360 * Math.round((longitude - rawLongitude) / 360)
+      longitude = longitudeNear(rawLongitude, longitude)
       const position = [lat, longitude]
       if (!segment) {
         segment = []
