@@ -62,10 +62,10 @@ function notamTime(iso) {
   return iso && !Number.isNaN(date) ? date.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + "Z" : ""
 }
 
-export function Notams({ flight }) {
+export function Notams({ flight, embedded = false }) {
   const groups = flightNotams(flight)
   return <div className="space-y-5">
-    <PageBanner icon={TriangleAlert} title="NOTAMs" detail={flightNumber(flight)} />
+    {!embedded && <PageBanner icon={TriangleAlert} title="NOTAMs" detail={flightNumber(flight)} />}
     {!groups.length ? <p className="panel secondary-copy p-5">Import a SimBrief dispatch to view airport NOTAMs.</p> :
       <Tabs defaultValue="0">
         <TabsList className="module-tabs h-auto! max-w-full flex-wrap">{groups.map((group, tab) =>

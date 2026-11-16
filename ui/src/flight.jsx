@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowDownToLine, ArrowRight, CircleAlert, CloudLightning, Radio, Send, CloudSun, ExternalLink, FileText, FileType, FolderOpen, Map, Plane, UploadCloud } from "lucide-react"
+import { ArrowDownToLine, ArrowRight, CircleAlert, CloudLightning, FileCheck, Radio, Send, CloudSun, ExternalLink, FileText, FileType, FolderOpen, Map, Plane, ScrollText, TriangleAlert, UploadCloud } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -7,9 +7,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Navlog } from "./navlog"
+import { OfpDocument, PilotEntries } from "./ofp"
+import { briefingText, cfpText, releaseText } from "./ofp-text"
 import { PageBanner } from "./page-banner"
+import { FlightWeather, Release } from "./release"
+import { Notams } from "./tools"
 import { dispatchId, dispatchPdfUrl, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
+
+// Tabs of the OFP (as on the IJV EFB /ofp/ page) that show the pilot entries checklist
+export const ofpViews = ["brief-text", "release", "ofp", "notams", "weather"]
 
 function utc(value, includeDate = false) {
   if (!value) return "—"
@@ -249,6 +255,18 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
     link.click()
   }
 
+  function openReleaseEntry(id) {
+    setView("release")
+    setTimeout(() => {
+      const target = document.getElementById(id) ?? document.getElementById("release-signoff")
+      target?.scrollIntoView({ block: "center" })
+      target?.focus?.({ preventScroll: true })
+      target?.classList.remove("entry-flash")
+      void target?.offsetWidth
+      target?.classList.add("entry-flash")
+    })
+  }
+
   const origin = field(flight?.origin, "icao_code")
   const destination = field(flight?.destination, "icao_code")
   const fuel = field(flight?.fuel, "plan_ramp")
@@ -278,9 +296,12 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
     </> : <Tabs value={view} onValueChange={setView}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TabsList className="module-tabs h-auto! max-w-full flex-wrap">
-          <TabsTrigger className="px-4" value="briefing"><FolderOpen />Briefing</TabsTrigger>
-          <TabsTrigger className="px-4" value="navlog"><Map />Navlog</TabsTrigger>
-          <TabsTrigger className="px-4" value="ofp"><FileText />Full OFP</TabsTrigger>
+          <TabsTrigger className="px-4" value="briefing"><FolderOpen />Flight</TabsTrigger>
+          <TabsTrigger className="px-4" value="brief-text"><ScrollText />Briefing Text</TabsTrigger>
+          <TabsTrigger className="px-4" value="release"><FileCheck />Dispatch Release</TabsTrigger>
+          <TabsTrigger className="px-4" value="ofp"><FileText />Flight Plan (CFP)</TabsTrigger>
+          <TabsTrigger className="px-4" value="notams"><TriangleAlert />NOTAM</TabsTrigger>
+          <TabsTrigger className="px-4" value="weather"><CloudSun />Weather</TabsTrigger>
           {customPdfAvailable && <TabsTrigger className="px-4" value="pdf"><FileType />IJV PDF</TabsTrigger>}
         </TabsList>
         <div className="flex flex-wrap gap-2">
@@ -340,12 +361,15 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
           {acars && <AcarsPanel key={dispatchId(flight)} flight={flight} airports={airports} />}
         </div>
       </TabsContent>
-      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog key={dispatchId(flight)} flight={flight} airports={airports} openAipAvailable={openAipAvailable} entries={navlogEntries} updateEntry={updateNavlogEntry} /></TabsContent>
-      <TabsContent className="mt-3 space-y-4" value="ofp">
-        <ExternalButton href="https://dispatch.simbrief.com/options/edit">Edit in SimBrief</ExternalButton>
-        {field(flight.text, "plan_html") ? <iframe className="viewer bg-white" sandbox="" title="SimBrief operational flight plan" srcDoc={field(flight.text, "plan_html")} /> :
-          <pre className="report">{field(flight.text, "plan_text") || "This dispatch has no full OFP document."}</pre>}
+      {ofpViews.includes(view) && <div className="mt-3"><PilotEntries release={navlogEntries.release} openEntry={openReleaseEntry} /></div>}
+      <TabsContent className="mt-3" value="brief-text"><OfpDocument title="Briefing text">{briefingText(flight)}</OfpDocument></TabsContent>
+      <TabsContent className="mt-3 space-y-4" value="release">
+        <OfpDocument title="Dispatch release">{releaseText(flight, navlogEntries.release)}</OfpDocument>
+        <Release key={dispatchId(flight)} flight={flight} entries={navlogEntries} updateEntry={updateNavlogEntry} />
       </TabsContent>
+      <TabsContent className="mt-3" value="ofp"><OfpDocument title="Computerized flight plan">{cfpText(flight)}</OfpDocument></TabsContent>
+      <TabsContent className="mt-3" value="notams"><Notams flight={flight} embedded /></TabsContent>
+      <TabsContent className="mt-3" value="weather"><FlightWeather flight={flight} /></TabsContent>
       {customPdfAvailable && <TabsContent className="mt-3" value="pdf">
         {pdf?.flight === flight ? <iframe className="viewer h-[min(80svh,60rem)]! bg-white" title="IJV briefing PDF" src={pdf.url} /> :
           pdfBusy ? <Skeleton className="viewer" /> :

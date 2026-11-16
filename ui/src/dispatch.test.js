@@ -35,7 +35,9 @@ test("navlog legs keep fix order and distinguish zero from missing data", async 
   const legs = navlogLegs(log, "WIII")
   assert.deepEqual(legs.map(leg => leg.ident), ["WIII", "TOC", "TOD", "WIPP", "NEXT"])
   assert.deepEqual(legs.map(leg => leg.totalDistance), [0, 20.5, 30.5, null, null])
-  assert.deepEqual(legs[1], {
+  const { fix, ...leg } = legs[1]
+  assert.equal(fix.via_airway, "DCT")
+  assert.deepEqual(leg, {
     ident: "TOC", airway: "DCT", altitude: 31000, track: 5,
     distance: 20.5, totalDistance: 20.5, elapsed: 600, fuel: 5000, position: null,
   })
@@ -166,19 +168,62 @@ test("navlog entry validation", async () => {
 })
 
 test("fuel status, destination estimate and fuel-check reminder", async () => {
-  const { fuelStatus, fuelCheckDue, plannedEto, takeoffTime } = await import("./dispatch.js")
+  const { fuelStatus, fuelCheckDue, plannedEto, takeoffTime, actualTakeoffFuel } = await import("./dispatch.js")
   const legs = [{ fuel: 9000, elapsed: 0 }, { fuel: 8000, elapsed: 600 }, { fuel: 6000, elapsed: 1800 }, { fuel: 3000, elapsed: 3600 }]
   assert.equal(fuelStatus(legs, {}).destinationEstimate, null)
   const status = fuelStatus(legs, { "p:1": { fuel: 7900 }, "p:2": { fuel: 5800 }, "a0:2": { fuel: 1 } })
   assert.deepEqual(status.rows.map(row => row.deviation), [null, -100, -200, null])
   assert.equal(status.latest.index, 2)
   assert.equal(status.destinationEstimate, 2800)
-  assert.equal(fuelCheckDue(legs, {}, 1000, 1000 + 700), 1)
-  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, 1000, 1000 + 700), -1)
-  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, 1000, 1000 + 2000), 2)
-  assert.equal(fuelCheckDue(legs, {}, null), -1)
+  const takeoffOnly = fuelStatus(legs, {}, { planned: 9000, actual: 9300 })
+  assert.equal(takeoffOnly.latest.leg.ident, "Takeoff")
+  assert.equal(takeoffOnly.destinationEstimate, 3300)
+  assert.equal(fuelStatus(legs, { "p:1": { fuel: 7900 } }, { planned: 9000, actual: 9300 }).destinationEstimate, 2900)
+  assert.equal(actualTakeoffFuel({ fuel: { taxi: "300" } }, { release: { ramp: 9600 } }), 9300)
+  assert.equal(actualTakeoffFuel({ fuel: { taxi: "300" } }, {}), null)
+  const etos = legs.map(leg => 1000 + leg.elapsed)
+  assert.equal(fuelCheckDue(legs, {}, etos, 1000 + 700), 1)
+  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, etos, 1000 + 700), -1)
+  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, etos, 1000 + 2000), 2)
+  assert.equal(fuelCheckDue(legs, {}, legs.map(() => null), 99999), -1)
   assert.equal(takeoffTime({ times: { est_out: "3600", taxi_out: "600" } }), 4200)
   assert.equal(takeoffTime({ times: { est_off: "4000", est_out: "3600" } }), 4000)
   assert.equal(plannedEto(4200, 600), "0120")
   assert.equal(plannedEto(null, 600), "")
+})
+
+test("revised ETOs follow airborne time and the latest ATO, across midnight", async () => {
+  const { revisedEtos, utcTimeNear } = await import("./dispatch.js")
+  const day = 20000 * 86400
+  assert.equal(utcTimeNear("0005", day - 600), day + 300)
+  assert.equal(utcTimeNear("2355", day + 600), day - 300)
+  assert.equal(utcTimeNear("12:00", day), null)
+  const legs = [{ elapsed: 600 }, { elapsed: 1200 }, { elapsed: null }, { elapsed: 2400 }]
+  const takeoff = day + 3600 // 0100Z
+  assert.deepEqual(revisedEtos(legs, {}, takeoff), [takeoff + 600, takeoff + 1200, null, takeoff + 2400])
+  assert.deepEqual(revisedEtos(legs, { dep: { off: "0105" } }, takeoff), [day + 3900 + 600, day + 3900 + 1200, null, day + 3900 + 2400])
+  // ATO 4 min late at leg 0 pushes later estimates by 4 min
+  assert.deepEqual(revisedEtos(legs, { "p:0": { ato: "0114" } }, takeoff), [takeoff + 600, takeoff + 1440, null, takeoff + 2640])
+  assert.deepEqual(revisedEtos(legs, {}, null), [null, null, null, null])
+})
+
+test("flightProgress uses the latest ATO, then time since airborne", async () => {
+  const { flightProgress } = await import("./dispatch.js")
+  const day = 20000 * 86400
+  const flight = { times: { est_out: day + 3000, est_off: day + 3600 } }
+  const legs = [{ ident: "A", elapsed: 600, totalDistance: 100 }, { ident: "B", elapsed: 1800, totalDistance: 300 }, { ident: "C", elapsed: 3600, totalDistance: 400 }]
+  const planned = flightProgress(flight, legs, {}, day + 4000)
+  assert.deepEqual([planned.phase, planned.fraction, planned.etd, planned.eta], ["Scheduled", 0, day + 3000, day + 7200])
+  assert.equal(flightProgress(flight, legs, { dep: { out: "0052" } }, day).phase, "Taxi out")
+  const airborne = flightProgress(flight, legs, { dep: { off: "0100" } }, day + 3600 + 1800)
+  assert.deepEqual([airborne.phase, airborne.fraction, airborne.basis], ["En route", 0.5, "time since airborne"])
+  const ato = flightProgress(flight, legs, { "p:1": { ato: "0130" } }, day)
+  assert.deepEqual([ato.fraction, ato.flownNm, ato.basis], [0.75, 300, "ATO at B"])
+  assert.deepEqual([flightProgress(flight, legs, { "p:2": { ato: "0200" } }).phase, flightProgress(flight, legs, { "p:2": { ato: "0200" } }).fraction], ["Arrived", 1])
+})
+
+test("release entry validation", async () => {
+  const { parseReleaseNumber } = await import("./dispatch.js")
+  assert.deepEqual(["", "142", "79", "201", "1.5e3", "-1"].map(v => parseReleaseNumber(v, { min: 80, max: 200 })), ["", 142, null, null, null, null])
+  assert.equal(parseReleaseNumber("61000.5"), 61000.5)
 })

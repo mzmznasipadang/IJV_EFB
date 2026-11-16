@@ -10,7 +10,7 @@ const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 const attribution = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
 const openAipAttribution = '© <a href="https://www.openaip.net/">OpenAIP</a> (<a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>)'
 
-export function NavlogMap({ routes, flight, airports, openAipAvailable, standalone = false }) {
+export function NavlogMap({ routes, flight, airports, openAipAvailable, standalone = false, markers }) {
   const container = useRef(null)
   const resetView = useRef(null)
   const toggleLayer = useRef(null)
@@ -73,6 +73,14 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable, standalo
           }).bindTooltip(label, { direction: "top", offset: [0, -5] }).addTo(map)
         }
       }
+      for (const { position, label, title, color } of markers ?? []) {
+        bounds.extend(position)
+        const text = document.createElement("span")
+        text.textContent = label
+        if (title) text.title = title
+        leaflet.circleMarker(position, { color: "#fff", fillColor: color, fillOpacity: 1, weight: 2, radius: 7 })
+          .bindTooltip(text, { direction: "top", offset: [0, -7], permanent: true, interactive: Boolean(title) }).addTo(map)
+      }
       const reference = hasRoute ? bounds.getCenter().lng : overviewCenter[1]
       Object.assign(overlays, createBriefingLayers(leaflet, map, flight, airports, routes, reference, (name, text) => {
         if (!disposed) setBriefingMessages(messages => ({ ...messages, [name]: text }))
@@ -117,7 +125,7 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable, standalo
       resize?.disconnect()
       map?.remove()
     }
-  }, [showMap, hasRoute, routes, flight, airports, openAipAvailable])
+  }, [showMap, hasRoute, routes, flight, airports, openAipAvailable, markers])
 
   const mapReady = status === "ready" || status === "tile-error"
   return <section className="panel min-w-0 overflow-hidden" aria-label={title}>

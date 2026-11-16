@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react"
-import { ChevronDown, ChevronLeft, ClipboardList, CloudSun, House, LogOut, Map, Monitor, Moon, Sun, UserCircle, Wifi, WifiOff } from "lucide-react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { BookOpen, ChevronDown, ChevronLeft, CloudSun, FileText, Fuel, House, LifeBuoy, LogOut, Map, Monitor, Moon, Sun, TriangleAlert, UserCircle, Wifi, WifiOff } from "lucide-react"
 import { createRoot } from "react-dom/client"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Charts, Checklists } from "./documents"
 import { dispatchId, field, flightAircraft, flightAirports, flightNumber, loadDispatch, loadNavlogEntries, saveDispatch, saveNavlogEntries } from "./dispatch"
-import { FlightFolder } from "./flight"
+import { FlightFolder, ofpViews } from "./flight"
 import { Home } from "./home"
 import { generateManifest } from "./manifest"
-import { FlightMap, FuelMonitoring } from "./navlog"
+import { Diversion } from "./diversion.jsx"
+import { FlightMap, FuelMonitoring, Navlog } from "./navlog"
 import { Manifest, Notams, Notes, Performance, WindMatrix } from "./tools"
 import { Weather } from "./weather"
 import "@fontsource-variable/inter/wght.css"
@@ -22,17 +23,27 @@ const appearanceOptions = [
   ["dark", "Dark", Moon],
   ["system", "System", Monitor],
 ]
+// [page, flight folder view, label, icon, needs a dispatch]
 const dock = [
-  ["home", "Home", House],
-  ["flight", "Flight", ClipboardList],
-  ["weather", "Weather", CloudSun],
-  ["charts", "Charts", Map],
+  ["home", null, "Home", House],
+  ["flight", "ofp", "OFP", FileText, true],
+  ["navlog", null, "Navlog", Map, true],
+  ["fuel", null, "Fuel Mon.", Fuel, true],
+  ["weather", null, "Weather", CloudSun],
+  ["notams", null, "NOTAMs", TriangleAlert, true],
+  ["diversion", null, "Diversion", LifeBuoy, true],
+  ["charts", null, "Charts", BookOpen],
 ]
 
-function Dock({ active, navigate }) {
-  return <nav className="module-dock" aria-label="EFB navigation">
-    {dock.map(([id, label, Icon]) => <Button key={id} variant="ghost" className="dock-button"
-      aria-current={active === id ? "page" : undefined} onClick={() => navigate(id)}>
+function Dock({ active, flightView, hasFlight, navigate, openFlightView }) {
+  const nav = useRef(null)
+  // The dock scrolls sideways on phones: keep the current item visible
+  useEffect(() => { nav.current?.querySelector("[aria-current]")?.scrollIntoView({ inline: "center", block: "nearest" }) }, [active, flightView])
+  return <nav ref={nav} className="module-dock" aria-label="EFB navigation">
+    {dock.map(([id, view, label, Icon, needsFlight]) => <Button key={label} variant="ghost" className="dock-button"
+      disabled={needsFlight && !hasFlight} title={needsFlight && !hasFlight ? "Import a dispatch first" : undefined}
+      aria-current={active === id && (!view || view === flightView || (view === "ofp" && ofpViews.includes(flightView))) ? "page" : undefined}
+      onClick={() => view ? openFlightView(view) : navigate(id)}>
       <Icon aria-hidden="true" />{label}
     </Button>)}
   </nav>
@@ -162,7 +173,7 @@ function App() {
   }
 
   function openNavlogEntry(id) {
-    openFlightView("navlog")
+    navigate("navlog")
     setTimeout(() => {
       const row = document.getElementById(id)
       row?.scrollIntoView({ block: "center" })
@@ -210,11 +221,12 @@ function App() {
   return <>
     <Toolbar active={active} flight={flight} goBack={goBack} accountOpen={accountOpen} setAccountOpen={setAccountOpen} />
     <main className={active === "home" ? "workspace home-workspace" : "workspace"}>
-      <div hidden={active !== "home"}><Home flight={flight} navigate={navigate} openFlightView={openFlightView}
+      <div hidden={active !== "home"}><Home flight={flight} entries={navlogEntries} navigate={navigate} openFlightView={openFlightView}
         openProfile={() => { window.scrollTo(0, 0); setAccountOpen(true) }} /></div>
       <div hidden={active !== "flight"}><FlightFolder flight={flight} setFlight={activateFlight} airports={airports} simbriefId={config.simbriefId} acars={config.acars}
         openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} openAipAvailable={config.openAipAvailable}
         navlogEntries={navlogEntries} updateNavlogEntry={updateNavlogEntry} /></div>
+      <div hidden={active !== "navlog"}>{flight && <Navlog key={dispatchId(flight)} flight={flight} airports={airports} entries={navlogEntries} updateEntry={updateNavlogEntry} />}</div>
       <div hidden={active !== "weather"}><Weather airport={weatherAirport} setAirport={setWeatherAirport} flightAirports={airports} /></div>
       <div hidden={active !== "charts"}><Charts catalog={config.charts} airport={chartAirport} setAirport={setChartAirport}
         airports={airports} mode={chartMode} setMode={setChartMode} /></div>
@@ -225,9 +237,10 @@ function App() {
       <div hidden={active !== "notams"}><Notams flight={flight} /></div>
       <div hidden={active !== "winds"}><WindMatrix flight={flight} /></div>
       <div hidden={active !== "fuel"}>{flight && <FuelMonitoring flight={flight} entries={navlogEntries} openEntry={openNavlogEntry} />}</div>
+      {active === "diversion" && flight && <div><Diversion flight={flight} airports={airports} entries={navlogEntries} openAipAvailable={config.openAipAvailable} /></div>}
       <div hidden={active !== "manifest"}><Manifest flight={flight} rows={manifest} /></div>
     </main>
-    {active !== "home" && <Dock active={active} navigate={navigate} />}
+    {active !== "home" && <Dock active={active} flightView={flightView} hasFlight={Boolean(flight)} navigate={navigate} openFlightView={openFlightView} />}
   </>
 }
 

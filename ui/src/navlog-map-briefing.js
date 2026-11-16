@@ -1,4 +1,5 @@
 import { airportWxPosition, notamMapAreas, sigmetMapAreas } from "./navlog-briefing.js"
+import { field, flightNotams, longitudeNear } from "./dispatch.js"
 import { getAirportData, getJSON } from "./weather"
 
 const refreshInterval = 5 * 60 * 1000
@@ -109,8 +110,16 @@ export function createBriefingLayers(leaflet, map, flight, airports, routes, ref
 
   const overlays = { SIGMETs: sigmets }
   if (airports.length) overlays["Airport WX"] = airportWx
-  if (flight && notamMapAreas(flight, reference).length) {
-    overlays["NOTAM areas"] = refreshingLayer(leaflet, "NOTAM areas", () => notamMapAreas(flight, reference), (layer, areas) => {
+  // Q-line areas where the NOTAM gives one, plus one marker per flight airport listing its NOTAMs
+  const notamAirports = flightNotams(flight).filter(group => group.notams.length).map(group => {
+    const record = [flight.origin, flight.destination, ...[flight.alternate ?? []].flat()].find(airport => field(airport, "icao_code") === group.code)
+    const lat = Number(field(record, "pos_lat")), lon = Number(field(record, "pos_long"))
+    const position = Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon) ? [lat, longitudeNear(lon, reference)] :
+      stations.find(station => station.code === group.code)?.position
+    return position && { ...group, position }
+  }).filter(Boolean)
+  if (flight && (notamAirports.length || notamMapAreas(flight, reference).length)) {
+    overlays.NOTAMs = refreshingLayer(leaflet, "NOTAMs", () => ({ areas: notamMapAreas(flight, reference), airports: notamAirports }), (layer, { areas, airports: groups }) => {
       for (const area of areas) {
         const style = { pane: "navlog-notams", color: "#782d83", weight: 2, dashArray: "4 4", fillOpacity: 0.08 }
         const shape = area.radiusNm
@@ -121,7 +130,19 @@ export function createBriefingLayers(leaflet, map, flight, airports, routes, ref
           label: notice.id, detail: notice.times, text: notice.report,
         }))), popupOptions).addTo(layer)
       }
-      return areas.length ? "" : "This dispatch has no current plottable NOTAM areas."
+      for (const group of groups) {
+        const urgent = group.notams.filter(notam => notam.score > 0).length
+        const badge = document.createElement("span")
+        badge.className = "block rounded-sm border border-white px-1 text-center text-[10px] leading-4 font-semibold text-white shadow"
+        badge.style.backgroundColor = urgent ? "#a32837" : "#782d83"
+        badge.textContent = `NOTAM ${group.notams.length}`
+        leaflet.marker(group.position, {
+          pane: "navlog-notams", title: `${group.code} NOTAMs`, alt: `${group.code} NOTAMs`,
+          icon: leaflet.divIcon({ html: badge, className: "", iconSize: [58, 18], iconAnchor: [29, -6] }),
+        }).bindPopup(popup(`${group.code} · ${group.role} · ${group.notams.length} NOTAM${group.notams.length === 1 ? "" : "s"}${urgent ? `, ${urgent} priority` : ""}`,
+          group.notams.map(notam => ({ label: notam.notam_id, text: notam.text }))), popupOptions).addTo(layer)
+      }
+      return areas.length || groups.length ? "" : "This dispatch has no current NOTAMs to plot."
     }, onMessage)
   }
   return overlays

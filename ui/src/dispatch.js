@@ -112,6 +112,7 @@ export function navlogLegs(log, departure) {
       elapsed: navlogNumber(fix, "time_total"),
       fuel: navlogNumber(fix, "fuel_plan_onboard"),
       position: navlogPosition(fix),
+      fix,
     }
   })
 }
@@ -317,27 +318,85 @@ export function takeoffTime(flight) {
 
 export const plannedEto = (takeoff, elapsed) => takeoff != null && elapsed != null ? hhmm(takeoff + elapsed) : ""
 
-// Planned vs actual fuel on the primary route; the latest check is the furthest waypoint with actual fuel
-export function fuelStatus(legs, entries) {
+// Actual takeoff fuel: crew-entered ramp fuel on the release minus planned taxi fuel
+export function actualTakeoffFuel(flight, entries) {
+  const ramp = entries?.release?.ramp
+  if (typeof ramp !== "number") return null
+  return ramp - (Number(field(flight?.fuel, "taxi")) || 0)
+}
+
+// Planned vs actual fuel on the primary route; the latest check is the furthest waypoint with actual fuel,
+// or the actual takeoff fuel when no waypoint has been checked yet
+export function fuelStatus(legs, entries, takeoff = null) {
   const rows = legs.map((leg, index) => {
     const actual = entries[`p:${index}`]?.fuel
     const hasActual = typeof actual === "number"
     return { index, leg, entry: entries[`p:${index}`] ?? {}, planned: leg.fuel, actual: hasActual ? actual : null,
       deviation: hasActual && leg.fuel != null ? actual - leg.fuel : null }
   })
-  const latest = rows.findLast(row => row.deviation != null) ?? null
+  const takeoffRow = takeoff?.actual != null && takeoff.planned != null ? { index: -1, leg: { ident: "Takeoff" }, entry: {},
+    planned: takeoff.planned, actual: takeoff.actual, deviation: takeoff.actual - takeoff.planned } : null
+  const latest = rows.findLast(row => row.deviation != null) ?? takeoffRow
   const destinationPlanned = legs.at(-1)?.fuel ?? null
-  return { rows, latest, destinationPlanned,
+  return { rows, takeoff: takeoffRow, latest, destinationPlanned,
     destinationEstimate: latest && destinationPlanned != null ? destinationPlanned + latest.deviation : null }
 }
 
-// Index of the latest primary waypoint whose planned time has passed with no fuel check since the last one, or -1
-export function fuelCheckDue(legs, entries, takeoff, nowSec = Date.now() / 1000) {
-  if (takeoff == null) return -1
+// HHMM as epoch seconds on the UTC day that puts it closest to `near` (handles flights across midnight)
+export function utcTimeNear(text, near) {
+  if (!/^\d{4}$/.test(text ?? "") || near == null) return null
+  const day = Math.floor(near / 86400) * 86400
+  const time = day + Number(text.slice(0, 2)) * 3600 + Number(text.slice(2)) * 60
+  return [time - 86400, time, time + 86400].reduce((best, value) => Math.abs(value - near) < Math.abs(best - near) ? value : best)
+}
+
+// Estimated time over each leg (epoch s): latest ATO before it, else actual airborne time, else planned takeoff,
+// plus the planned elapsed time between the two
+export function revisedEtos(legs, entries, takeoff, route = "p") {
+  const airborne = utcTimeNear(entries?.dep?.off, takeoff) ?? takeoff
+  let base = airborne == null ? null : { time: airborne, elapsed: 0 }
+  return legs.map((leg, index) => {
+    const eto = base && leg.elapsed != null ? base.time + leg.elapsed - base.elapsed : null
+    const ato = utcTimeNear(entries?.[`${route}:${index}`]?.ato, eto ?? takeoff)
+    if (ato != null && leg.elapsed != null) base = { time: ato, elapsed: leg.elapsed }
+    return eto
+  })
+}
+
+// Index of the latest primary waypoint whose estimated time has passed with no fuel check since the last one, or -1
+export function fuelCheckDue(legs, entries, etos, nowSec = Date.now() / 1000) {
   let due = -1
   legs.forEach((leg, index) => {
     if (typeof entries[`p:${index}`]?.fuel === "number") due = -1
-    else if (leg.elapsed != null && takeoff + leg.elapsed <= nowSec) due = index
+    else if (etos[index] != null && etos[index] <= nowSec) due = index
   })
   return due
+}
+
+// Flight progress for the home status: distance flown from the latest ATO, else time since airborne
+export function flightProgress(flight, legs, entries, nowSec = Date.now() / 1000) {
+  const takeoff = takeoffTime(flight)
+  const etos = revisedEtos(legs, entries, takeoff)
+  const totalNm = legs.findLast(leg => leg.totalDistance != null)?.totalDistance ?? null
+  const etd = utcTimeNear(entries?.dep?.out, takeoff) ?? (Number(field(flight?.times, "est_out")) || null)
+  const eta = etos.findLast(time => time != null) ?? (Number(field(flight?.times, "est_on")) || null)
+  const airborne = utcTimeNear(entries?.dep?.off, takeoff)
+  const lastAto = legs.findLastIndex((leg, index) => entries?.[`p:${index}`]?.ato)
+  let fraction = 0
+  if (lastAto >= 0 && totalNm) fraction = (legs[lastAto].totalDistance ?? 0) / totalNm
+  else if (airborne != null && eta > airborne) fraction = (nowSec - airborne) / (eta - airborne)
+  fraction = Math.min(1, Math.max(0, fraction))
+  const arrived = lastAto === legs.length - 1 && legs.length > 0
+  const phase = arrived ? "Arrived" : lastAto >= 0 || airborne != null ? "En route" : entries?.dep?.out ? "Taxi out" : "Scheduled"
+  return { phase, fraction: arrived ? 1 : fraction, totalNm, flownNm: totalNm == null ? null : Math.round(totalNm * fraction), etd, eta,
+    basis: lastAto >= 0 ? `ATO at ${legs[lastAto].ident}` : airborne != null ? "time since airborne" : null }
+}
+
+// Crew release entries: weights and fuel in the dispatch unit, speeds in knots. Returns the number, "" to clear, or null when invalid
+export function parseReleaseNumber(value, { min = 0, max = Infinity } = {}) {
+  const text = String(value).trim()
+  if (text === "") return ""
+  if (!/^\d+(\.\d+)?$/.test(text)) return null
+  const number = Number(text)
+  return number >= min && number <= max ? number : null
 }

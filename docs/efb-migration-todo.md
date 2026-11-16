@@ -20,15 +20,15 @@ Use the [reference IJV Crew EFB](https://efb.indonesiajourneyvirtual.site/) as a
 
 ## 3. OFP and dispatch release
 
-- [ ] Add tabs for briefing text, dispatch release, flight plan, NOTAMs, and weather alongside the existing IJV PDF export.
-- [ ] Add fields for actual weights, ramp fuel, takeoff speeds, and pilot sign-off.
-- [ ] Share actual takeoff fuel with Fuel Monitoring when the crew has entered the required values.
+- [x] Add tabs for briefing text, dispatch release, flight plan, NOTAMs, and weather alongside the existing IJV PDF export.
+- [x] Add fields for actual weights, ramp fuel, takeoff speeds, and pilot sign-off.
+- [x] Share actual takeoff fuel with Fuel Monitoring when the crew has entered the required values.
 
 ## 4. Diversion
 
-- [ ] Confirm sources for airport and runway dimensions, approach availability, airport weather, simulator position, and fuel on board.
-- [ ] Enable the Diversion tile. Show candidate airports on the OpenAIP map and rank them using runway suitability, weather, distance, and estimated fuel on landing.
-- [ ] Show the basis for the ranking and label any fallback position or fuel estimate explicitly.
+- [x] Confirm sources for airport and runway dimensions, approach availability, airport weather, simulator position, and fuel on board.
+- [x] Enable the Diversion tile. Show candidate airports on the OpenAIP map and rank them using runway suitability, weather, distance, and estimated fuel on landing.
+- [x] Show the basis for the ranking and label any fallback position or fuel estimate explicitly.
 
 ## Later candidates
 

@@ -142,6 +142,102 @@ if (isset($_GET['hoppie'])) {
     exit(json_encode(['ok' => true]));
 }
 
+// Diversion candidates: nearest large/medium airports with a 4-letter ICAO and their runways (OurAirports, cached 7 days)
+if (isset($_GET['diversion_airports'])) {
+    session_write_close();
+    header('Content-Type: application/json');
+    $lat = filter_var($_GET['lat'] ?? null, FILTER_VALIDATE_FLOAT);
+    $lon = filter_var($_GET['lon'] ?? null, FILTER_VALIDATE_FLOAT);
+    $radius = isset($_GET['radius']) ? filter_var($_GET['radius'], FILTER_VALIDATE_FLOAT) : 300.0;
+    if ($lat === false || $lon === false || $radius === false || !is_finite($lat) || !is_finite($lon) || !is_finite($radius)
+        || abs($lat) > 90 || abs($lon) > 180 || $radius < 1 || $radius > 600) {
+        http_response_code(400);
+        exit(json_encode(['error' => 'Invalid position or radius.']));
+    }
+    $openCatalogue = function (string $name, string $cacheFile, string $header) {
+        if (!is_file($cacheFile) || filemtime($cacheFile) < time() - 7 * 86400) {
+            $fresh = @file_get_contents(
+                "https://davidmegginson.github.io/ourairports-data/{$name}.csv",
+                false,
+                stream_context_create(["http" => ["timeout" => 15, "user_agent" => "WebEFBFlightDeck/2.0"]])
+            );
+            if ($fresh !== false && strlen($fresh) > 100000 && str_starts_with($fresh, $header)) {
+                $tempFile = tempnam(sys_get_temp_dir(), 'ijv_airports_');
+                if ($tempFile !== false) {
+                    if (file_put_contents($tempFile, $fresh) !== strlen($fresh) || !rename($tempFile, $cacheFile)) {
+                        unlink($tempFile);
+                    }
+                }
+            }
+        }
+        $handle = @fopen($cacheFile, 'r');
+        return $handle === false ? [null, []] : [$handle, array_flip(fgetcsv($handle, 0, ',', '"', '') ?: [])];
+    };
+    $unavailable = function ($handle) {
+        if ($handle) fclose($handle);
+        http_response_code(503);
+        exit(json_encode(['error' => 'The airport catalogue is temporarily unavailable.']));
+    };
+
+    [$catalog, $columns] = $openCatalogue('airports', sys_get_temp_dir() . '/ijv_efb_ourairports.csv', '"id","ident",');
+    if (!$catalog || array_diff(['id', 'ident', 'type', 'name', 'latitude_deg', 'longitude_deg', 'elevation_ft', 'icao_code'], array_keys($columns))) {
+        $unavailable($catalog);
+    }
+    $candidates = [];
+    $distances = [];
+    $toRad = M_PI / 180;
+    while (($row = fgetcsv($catalog, 0, ',', '"', '')) !== false) {
+        $type = $row[$columns['type']] ?? '';
+        if ($type !== 'large_airport' && $type !== 'medium_airport') continue;
+        $icao = $row[$columns['icao_code']] ?? '';
+        if (!preg_match('/^[A-Z]{4}$/D', $icao)) $icao = $row[$columns['ident']] ?? '';
+        if (!preg_match('/^[A-Z]{4}$/D', $icao)) continue;
+        $aLat = $row[$columns['latitude_deg']] ?? '';
+        $aLon = $row[$columns['longitude_deg']] ?? '';
+        if (!is_numeric($aLat) || !is_numeric($aLon)) continue;
+        $aLat = (float)$aLat;
+        $aLon = (float)$aLon;
+        $h = sin(($aLat - $lat) * $toRad / 2) ** 2 + cos($lat * $toRad) * cos($aLat * $toRad) * sin(($aLon - $lon) * $toRad / 2) ** 2;
+        $distance = 2 * 3440.065 * asin(min(1, sqrt($h)));
+        if ($distance > $radius) continue;
+        $id = $row[$columns['id']] ?? '';
+        $elevation = $row[$columns['elevation_ft']] ?? '';
+        $distances[$id] = $distance;
+        $candidates[$id] = [
+            'icao' => $icao, 'name' => $row[$columns['name']] ?? '', 'lat' => $aLat, 'lon' => $aLon,
+            'elevationFt' => is_numeric($elevation) ? (int)$elevation : null, 'type' => $type, 'runways' => [],
+        ];
+    }
+    fclose($catalog);
+    asort($distances);
+    $candidates = array_intersect_key($candidates, array_slice($distances, 0, 40, true));
+
+    [$runways, $columns] = $openCatalogue('runways', sys_get_temp_dir() . '/ijv_efb_ourairports_runways.csv', '"id","airport_ref",');
+    if (!$runways || array_diff(['airport_ref', 'length_ft', 'width_ft', 'surface', 'lighted', 'closed', 'le_ident', 'he_ident'], array_keys($columns))) {
+        $unavailable($runways);
+    }
+    while (($row = fgetcsv($runways, 0, ',', '"', '')) !== false) {
+        $ref = $row[$columns['airport_ref']] ?? '';
+        if (!isset($candidates[$ref])) continue;
+        $length = $row[$columns['length_ft']] ?? '';
+        $width = $row[$columns['width_ft']] ?? '';
+        $candidates[$ref]['runways'][] = [
+            'ident' => trim(($row[$columns['le_ident']] ?? '') . '/' . ($row[$columns['he_ident']] ?? ''), '/'),
+            'lengthFt' => is_numeric($length) ? (int)$length : null,
+            'widthFt' => is_numeric($width) ? (int)$width : null,
+            'surface' => $row[$columns['surface']] ?? '',
+            'lighted' => ($row[$columns['lighted']] ?? '') === '1',
+            'closed' => ($row[$columns['closed']] ?? '') === '1',
+        ];
+    }
+    fclose($runways);
+    // Nearest first, as the client re-ranks anyway
+    $nearest = [];
+    foreach (array_keys(array_intersect_key($distances, $candidates)) as $id) $nearest[] = $candidates[$id];
+    echo json_encode($nearest, JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 // CORSWeather Proxy Module
 if (isset($_GET['proxy_weather']) && isset($_GET['icao']) && isset($_GET['type'])) {
     session_write_close();
