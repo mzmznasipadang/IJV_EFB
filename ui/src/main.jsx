@@ -8,6 +8,7 @@ import { field, flightAircraft, flightAirports, flightNumber, loadDispatch, save
 import { FlightFolder } from "./flight"
 import { Home } from "./home"
 import { generateManifest } from "./manifest"
+import { FlightMap } from "./navlog"
 import { Manifest, Notams, Notes, Performance, WindMatrix } from "./tools"
 import { Weather } from "./weather"
 import "@fontsource-variable/inter/wght.css"
@@ -198,6 +199,7 @@ function App() {
       <div hidden={active !== "weather"}><Weather airport={weatherAirport} setAirport={setWeatherAirport} flightAirports={airports} /></div>
       <div hidden={active !== "charts"}><Charts catalog={config.charts} airport={chartAirport} setAirport={setChartAirport}
         airports={airports} mode={chartMode} setMode={setChartMode} /></div>
+      {active === "map" && <div><FlightMap flight={flight} airports={airports} openAipAvailable={config.openAipAvailable} /></div>}
       <div hidden={active !== "performance"}><Performance flight={flight} /></div>
       <div hidden={active !== "checklists"}><Checklists catalog={config.checklists} aircraft={flightAircraft(flight)} /></div>
       <div hidden={active !== "notes"}><Notes /></div>

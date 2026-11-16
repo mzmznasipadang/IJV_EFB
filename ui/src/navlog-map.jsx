@@ -5,21 +5,25 @@ import { createBriefingLayers } from "./navlog-map-briefing"
 
 const primaryColor = "#15448c"
 const alternateColor = "#9a4b0f"
+const overviewCenter = [-2.5, 118]
 const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 const attribution = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
 const openAipAttribution = '© <a href="https://www.openaip.net/">OpenAIP</a> (<a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>)'
 
-export function NavlogMap({ routes, flight, airports, openAipAvailable }) {
+export function NavlogMap({ routes, flight, airports, openAipAvailable, standalone = false }) {
   const container = useRef(null)
-  const fitRoute = useRef(null)
+  const resetView = useRef(null)
   const toggleLayer = useRef(null)
   const [status, setStatus] = useState("loading")
   const [aviationUnavailable, setAviationUnavailable] = useState(false)
   const [layerStates, setLayerStates] = useState({})
   const [briefingMessages, setBriefingMessages] = useState({})
+  const hasRoute = routes.length > 0
+  const showMap = standalone || hasRoute
+  const title = standalone ? "Map" : "Route map"
 
   useEffect(() => {
-    if (!routes.length) return
+    if (!showMap) return
     const element = container.current
     let map
     let resize
@@ -69,7 +73,8 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable }) {
           }).bindTooltip(label, { direction: "top", offset: [0, -5] }).addTo(map)
         }
       }
-      Object.assign(overlays, createBriefingLayers(leaflet, map, flight, airports, routes, bounds.getCenter().lng, (name, text) => {
+      const reference = hasRoute ? bounds.getCenter().lng : overviewCenter[1]
+      Object.assign(overlays, createBriefingLayers(leaflet, map, flight, airports, routes, reference, (name, text) => {
         if (!disposed) setBriefingMessages(messages => ({ ...messages, [name]: text }))
       }))
       setLayerStates(Object.fromEntries(Object.entries(overlays).map(([name, layer]) => [name, map.hasLayer(layer)])))
@@ -79,13 +84,16 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable }) {
         else layer.remove()
         setLayerStates(states => ({ ...states, [name]: checked }))
       }
-      fitRoute.current = () => map.fitBounds(bounds, { maxZoom: 10, padding: [28, 28], animate: false })
+      resetView.current = () => {
+        if (hasRoute) map.fitBounds(bounds, { maxZoom: 10, padding: [28, 28], animate: false })
+        else map.setView(overviewCenter, 4, { animate: false })
+      }
       let fitted = false
       function updateSize() {
         if (!element.clientWidth || !element.clientHeight) return
         map.invalidateSize({ pan: false, animate: false })
         if (!fitted) {
-          fitRoute.current()
+          resetView.current()
           fitted = true
           setStatus("ready")
         }
@@ -97,31 +105,31 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable }) {
       if (disposed) return
       map?.remove()
       map = null
-      fitRoute.current = null
+      resetView.current = null
       toggleLayer.current = null
       setStatus("unavailable")
     })
 
     return () => {
       disposed = true
-      fitRoute.current = null
+      resetView.current = null
       toggleLayer.current = null
       resize?.disconnect()
       map?.remove()
     }
-  }, [routes, flight, airports, openAipAvailable])
+  }, [showMap, hasRoute, routes, flight, airports, openAipAvailable])
 
-  const canFit = status === "ready" || status === "tile-error"
-  return <section className="panel min-w-0 overflow-hidden" aria-label="Route map">
+  const mapReady = status === "ready" || status === "tile-error"
+  return <section className="panel min-w-0 overflow-hidden" aria-label={title}>
     <div className="section-bar flex-wrap justify-between">
-      <h2 className="section-title">Route map</h2>
-      {routes.length > 0 && <Button type="button" variant="outline" size="sm" className="touch-control"
-        disabled={!canFit} onClick={() => fitRoute.current?.()}><Scan aria-hidden="true" />Fit route</Button>}
+      <h2 className="section-title">{title}</h2>
+      {showMap && <Button type="button" variant="outline" size="sm" className="touch-control"
+        disabled={!mapReady} onClick={() => resetView.current?.()}><Scan aria-hidden="true" />{hasRoute ? "Fit route" : "Reset view"}</Button>}
     </div>
-    {!routes.length ? <p className="secondary-copy p-4">SimBrief supplied no waypoint coordinates for this dispatch.</p> :
+    {!showMap ? <p className="secondary-copy p-4">SimBrief supplied no waypoint coordinates for this dispatch.</p> :
       <>
-        <div aria-label="Interactive planned route map" role="region">
-          {canFit && <div className="flex flex-wrap items-center gap-x-5 border-b px-4 py-1 text-xs" role="group" aria-label="Map layers">
+        <div aria-label={standalone ? "Interactive aviation map" : "Interactive planned route map"} role="region">
+          {mapReady && <div className="flex flex-wrap items-center gap-x-5 border-b px-4 py-1 text-xs" role="group" aria-label="Map layers">
             {Object.entries(layerStates).map(([name, checked]) => <label key={name} className="inline-flex min-h-8 items-center gap-2 font-medium">
               <input type="checkbox" checked={checked} className="size-4 accent-primary"
                 onChange={event => toggleLayer.current?.(name, event.target.checked)} />
@@ -129,12 +137,14 @@ export function NavlogMap({ routes, flight, airports, openAipAvailable }) {
             </label>)}
           </div>}
           <div className="relative isolate">
-            <div ref={container} className="h-72 bg-muted! sm:h-[24rem]" aria-label="Route map canvas" />
-            {status === "loading" && <p role="status" className="secondary-copy absolute inset-0 grid place-items-center">Loading route map…</p>}
-            {status === "unavailable" && <p role="status" className="secondary-copy absolute inset-0 grid place-items-center">The route map could not load.</p>}
+            <div ref={container} className={`bg-muted! ${standalone ? "h-[clamp(22rem,65svh,52rem)]" : "h-72 sm:h-[24rem]"}`} aria-label={standalone ? "Aviation map canvas" : "Route map canvas"} />
+            {status === "loading" && <p role="status" className="secondary-copy absolute inset-0 grid place-items-center">Loading {title.toLowerCase()}…</p>}
+            {status === "unavailable" && <p role="status" className="secondary-copy absolute inset-0 grid place-items-center">The {title.toLowerCase()} could not load.</p>}
           </div>
         </div>
-        {canFit && <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
+        {mapReady && <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t px-4 py-2 text-xs text-muted-foreground">
+          {!flight && <span>Import a dispatch to see your route and airport weather.</span>}
+          {standalone && flight && !hasRoute && <span>SimBrief supplied no waypoint coordinates for this dispatch.</span>}
           {routes.some(route => !route.alternate) && <span className="inline-flex items-center gap-2">
             <span aria-hidden="true" className="grid h-3 w-7 place-items-center rounded-xs bg-white"><span className="w-5 border-t-2" style={{ borderColor: primaryColor }} /></span>
             Primary

@@ -76,7 +76,7 @@ export function Home({ flight, navigate, openFlightView, openProfile }) {
       { label: "Roster", Icon: CalendarDays },
       { label: "Statistics", Icon: ChartColumnIncreasing },
       { label: "Logbook", Icon: BookOpen },
-      { label: "Charts", Icon: Map, open: () => navigate("charts") },
+      { label: "Map", Icon: Map, open: () => navigate("map") },
       { label: "vAMSYS", Icon: Database, href: "https://vamsys.io/phoenix/flight-center/booking" },
       { label: "Navigraph", Icon: Compass, href: "https://charts.navigraph.com" },
       { label: "Taxi Overspeed", Icon: Gauge },

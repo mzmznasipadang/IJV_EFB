@@ -49,16 +49,27 @@ function RouteTable({ title, legs, units }) {
   </div>
 }
 
+function useNavlogRoutes(flight) {
+  return useMemo(() => {
+    const departure = field(flight?.origin, "icao_code")
+    const destination = field(flight?.destination, "icao_code")
+    const primary = navlogLegs(flight?.navlog, departure)
+    const alternates = alternateNavlogLegs(flight?.alternate_navlog, destination)
+    return { primary, alternates, mapRoutes: navlogMapRoutes(primary, alternates) }
+  }, [flight])
+}
+
+export function FlightMap({ flight, airports, openAipAvailable }) {
+  const { mapRoutes } = useNavlogRoutes(flight)
+  return <NavlogMap routes={mapRoutes} flight={flight} airports={airports} openAipAvailable={openAipAvailable} standalone />
+}
+
 export function Navlog({ flight, airports, openAipAvailable }) {
   const departure = field(flight.origin, "icao_code")
   const destination = field(flight.destination, "icao_code")
   const rawUnits = String(field(flight.params, "units") ?? "").toLowerCase()
   const units = /^kgs?$/.test(rawUnits) ? "kg" : /^lbs?$/.test(rawUnits) ? "lb" : null
-  const { primary, alternates, mapRoutes } = useMemo(() => {
-    const primary = navlogLegs(flight.navlog, departure)
-    const alternates = alternateNavlogLegs(flight.alternate_navlog, destination)
-    return { primary, alternates, mapRoutes: navlogMapRoutes(primary, alternates) }
-  }, [flight, departure, destination])
+  const { primary, alternates, mapRoutes } = useNavlogRoutes(flight)
   const hasWaypoints = primary.length > 0 || alternates.length > 0
 
   return <>

@@ -107,8 +107,9 @@ export function createBriefingLayers(leaflet, map, flight, airports, routes, ref
     return layer.getLayers().length ? "" : "No plottable airport weather reports are available."
   }, onMessage)
 
-  const overlays = { SIGMETs: sigmets, "Airport WX": airportWx }
-  if (notamMapAreas(flight, reference).length) {
+  const overlays = { SIGMETs: sigmets }
+  if (airports.length) overlays["Airport WX"] = airportWx
+  if (flight && notamMapAreas(flight, reference).length) {
     overlays["NOTAM areas"] = refreshingLayer(leaflet, "NOTAM areas", () => notamMapAreas(flight, reference), (layer, areas) => {
       for (const area of areas) {
         const style = { pane: "navlog-notams", color: "#782d83", weight: 2, dashArray: "4 4", fillOpacity: 0.08 }
