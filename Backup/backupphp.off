@@ -1,0 +1,1279 @@
+<?php
+// Dynamic Server-Side Folder Scanner for PDF Checklists and Charts
+$checklistDir = 'checklists';
+$structure = [];
+
+function scanVectorDirectory($dirPath) {
+    $tree = [];
+    if (is_dir($dirPath)) {
+        $subFolders = array_filter(glob($dirPath . '/*'), 'is_dir');
+        foreach ($subFolders as $folder) {
+            $folderName = basename($folder);
+            $files = glob($folder . '/*.pdf');
+            $fileList = [];
+            foreach ($files as $file) {
+                $fileList[] = ['name' => basename($file, '.pdf'), 'path' => $file];
+            }
+            if (!empty($fileList)) {
+                $tree[] = ['folder' => $folderName, 'files' => $fileList];
+            }
+        }
+        $rootFiles = glob($dirPath . '/*.pdf');
+        if (!empty($rootFiles)) {
+            $rootFileList = [];
+            foreach ($rootFiles as $file) {
+                $rootFileList[] = ['name' => basename($file, '.pdf'), 'path' => $file];
+            }
+            array_unshift($tree, ['folder' => 'General Library', 'files' => $rootFileList]);
+        }
+    }
+    return $tree;
+}
+
+$structure = scanVectorDirectory($checklistDir);
+$chartsStructure = scanVectorDirectory('charts');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web EFB | Indonesia Journey Virtual</title>
+    <link rel="icon" href="image_1.png" type="image/png">
+    
+    <style>
+        :root {
+            /* Color Palette */
+            --bg-color: #121212;
+            --sidebar-bg: rgba(30, 30, 30, 0.95);
+            --text-main: #e0e0e0;
+            --text-muted: #aaa;
+            --accent: #007bff;
+            --navigraph-red: #e32636;
+            --panel-bg: rgba(45, 45, 45, 0.95);
+            --card-bg: rgba(20, 20, 20, 0.6);
+            --success: #28a745;
+            --sub-nav-bg: #222222;
+            --input-bg: #161616;
+            --border-color: #333333;
+            --res-color: #00f0ff;
+
+            /* Responsive Scaling Variables */
+            --sidebar-width: 95px;
+            --safe-padding: clamp(12px, 2vw, 20px);
+            --radius: 8px;
+            --font-dynamic: clamp(14px, 1vw + 12px, 16px);
+            --warning-amber: #ff9f43;
+        }
+
+        /* Base Reset & Core Layout */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-main); 
+            display: flex; 
+            flex-direction: row;
+            height: 100vh; 
+            overflow: hidden; 
+            position: relative;
+            font-size: var(--font-dynamic);
+        }
+
+        /* Access Gate Layer System Overlay */
+        #system-gate-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: #0b0b0b;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .gate-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 30px;
+            max-width: 450px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            text-align: center;
+        }
+
+        /* Watermark Background */
+        body::before {
+            content: ""; 
+            position: absolute; 
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url('image_0.png'); 
+            background-repeat: no-repeat;
+            background-position: center; 
+            background-size: clamp(180px, 25vw, 280px) auto; 
+            opacity: 0.06; 
+            z-index: -1; 
+            pointer-events: none;
+        }
+
+        /* Navigation Sidebar */
+        .sidebar { 
+            width: var(--sidebar-width); 
+            background-color: var(--sidebar-bg); 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding-top: 15px; 
+            border-right: 1px solid var(--border-color); 
+            flex-shrink: 0; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5); 
+            z-index: 10;
+        }
+
+        .nav-btn { 
+            background: none; 
+            border: none; 
+            color: var(--text-main); 
+            padding: 14px 0; 
+            width: 100%; 
+            cursor: pointer; 
+            font-size: 11px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            transition: all 0.2s ease; 
+            gap: 6px; 
+        }
+
+        .nav-btn span {
+            font-size: 18px;
+        }
+
+        .nav-btn:hover, .nav-btn.active { 
+            background-color: var(--panel-bg); 
+            color: var(--accent); 
+            border-left: 4px solid var(--accent); 
+        }
+
+        /* Main Content Workspace */
+        .main-content { 
+            flex-grow: 1; 
+            padding: var(--safe-padding); 
+            display: flex; 
+            flex-direction: column; 
+            overflow-y: auto; 
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Header Area */
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 10px; 
+            margin-bottom: var(--safe-padding); 
+            flex-shrink: 0; 
+            gap: 15px;
+        }
+
+        .header h2 {
+            font-size: clamp(18px, 2vw + 12px, 24px);
+            font-weight: 600;
+        }
+
+        #clock { 
+            font-family: monospace; 
+            font-size: clamp(14px, 1.5vw + 10px, 18px); 
+            letter-spacing: 1px; 
+            background: #1a1a1a;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Standard Modules */
+        .module { 
+            background-color: var(--panel-bg); 
+            padding: var(--safe-padding); 
+            border-radius: var(--radius); 
+            max-width: 1200px; 
+            width: 100%; 
+            margin-bottom: 20px; 
+            display: none; 
+            flex-direction: column; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+            border: 1px solid var(--border-color);
+        }
+
+        .module.active { 
+            display: flex; 
+        }
+
+        .sub-module-content {
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .sub-module-content.active {
+            display: flex;
+        }
+
+        .module h3 {
+            margin-bottom: 15px;
+            font-size: clamp(16px, 1.5vw + 10px, 20px);
+        }
+
+        /* Sub-Navigation Menus */
+        .sub-navbar { 
+            display: flex; 
+            gap: 5px; 
+            background: var(--sub-nav-bg); 
+            padding: 6px; 
+            border-radius: 4px; 
+            margin-bottom: 15px; 
+            border: 1px solid var(--border-color); 
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+
+        .sub-nav-btn { 
+            background: none; 
+            border: none; 
+            color: var(--text-muted); 
+            padding: 8px 16px; 
+            font-size: 13px; 
+            font-weight: 500; 
+            cursor: pointer; 
+            border-radius: 4px; 
+            transition: 0.15s; 
+        }
+
+        .sub-nav-btn:hover { color: #fff; background: #2d2d2d; }
+        .sub-nav-btn.active { background: var(--accent); color: white; }
+
+        /* Grid Layout Matrix */
+        .perf-layout-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: var(--safe-padding); 
+            margin-top: 10px; 
+        }
+
+        .perf-card { 
+            background: var(--card-bg); 
+            padding: var(--safe-padding); 
+            border-radius: 6px; 
+            border: 1px solid #444; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+        }
+
+        /* Forms & Interactive Fields */
+        .form-group { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 6px; 
+        }
+
+        .form-group label { 
+            font-size: 11px; 
+            text-transform: uppercase; 
+            color: var(--text-muted); 
+            letter-spacing: 0.5px; 
+        }
+
+        select, input[type="text"] { 
+            padding: 12px; 
+            font-size: 15px; 
+            border: 1px solid #444; 
+            border-radius: 4px; 
+            background-color: var(--input-bg); 
+            color: white; 
+            width: 100%;
+            height: 44px;
+        }
+
+        select:focus, input[type="text"]:focus { 
+            border-color: var(--accent); 
+            outline: none; 
+        }
+
+        select:disabled { 
+            opacity: 0.65; 
+            cursor: not-allowed; 
+            color: #b5b5b5; 
+            background-color: #0f0f0f;
+        }
+
+        /* Output Typography Displays */
+        .perf-field { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 12px 0; 
+            border-bottom: 1px solid #333; 
+            font-size: 15px; 
+        }
+
+        .perf-field:last-child { border-bottom: none; }
+        .res-val { font-family: monospace; font-size: 18px; font-weight: bold; color: var(--res-color); }
+
+        /* Raw Data Displays */
+        .data-display { 
+            margin-top: 10px; 
+            padding: 15px; 
+            background-color: #080808; 
+            font-family: 'Courier New', Courier, monospace; 
+            border-left: 4px solid var(--accent); 
+            border-radius: 4px; 
+            overflow-x: auto; 
+            color: #adff2f; 
+            font-size: 13px; 
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .data-display * { color: inherit !important; background: transparent !important; font-family: inherit !important; }
+
+        .station-alert-banner {
+            padding: 10px 15px;
+            background: rgba(255, 159, 67, 0.15);
+            border: 1px solid var(--warning-amber);
+            border-radius: 4px;
+            color: var(--warning-amber);
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: 15px;
+            display: none;
+        }
+
+        button.action-btn { 
+            padding: 12px 20px; 
+            font-size: 15px; 
+            background-color: var(--accent); 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: 500; 
+            min-height: 44px; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+        }
+
+        button.action-btn:hover { background-color: #0056b3; }
+
+        /* Manifest Tables */
+        .manifest-table-wrapper {
+            margin-top: 15px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+        }
+
+        .manifest-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        .manifest-table th, .manifest-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .manifest-table th {
+            background-color: var(--sub-nav-bg);
+            color: var(--accent);
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .manifest-table tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .manifest-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .badge-crew { background: rgba(0, 123, 255, 0.2); color: #007bff; border: 1px solid #007bff; }
+        .badge-pax { background: rgba(40, 167, 69, 0.2); color: #28a745; border: 1px solid #28a745; }
+
+        textarea { 
+            resize: none; 
+            font-family: monospace; 
+            font-size: 15px; 
+            height: 350px; 
+            width: 100%; 
+            padding: 12px;
+            background: var(--input-bg);
+            color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+        }
+
+        /* Split View Panes */
+        .split-container { 
+            display: flex; 
+            gap: var(--safe-padding); 
+            height: 70vh; 
+            margin-top: 5px; 
+            width: 100%;
+        }
+
+        .split-sidebar { 
+            width: 260px; 
+            background: #161616; 
+            padding: 15px; 
+            border-radius: 6px; 
+            border: 1px solid var(--border-color); 
+            overflow-y: auto; 
+            flex-shrink: 0; 
+        }
+
+        .tree-folder-title { font-weight: bold; font-size: 12px; margin-top: 12px; margin-bottom: 6px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #222; padding-bottom: 3px; }
+        .tree-file-link { padding: 8px 10px; font-size: 13px; color: #bbb; cursor: pointer; border-radius: 4px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: 0.1s; }
+        .tree-file-link:hover, .tree-file-link.active { background: #2a2a2a; color: white; }
+
+        .split-viewer { 
+            flex-grow: 1; 
+            background: #1e1e1e; 
+            border-radius: 6px; 
+            border: 1px solid var(--border-color); 
+            overflow: hidden; 
+            position: relative; 
+        }
+
+        .split-viewer iframe { width: 100%; height: 100%; border: none; }
+        .viewer-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #666; font-size: 13px; font-weight: 500; text-transform: uppercase; text-align: center; width: 85%; }
+
+        .auto-detect-badge { 
+            padding: 12px var(--safe-padding); 
+            background: #1c252e; 
+            border: 1px solid var(--accent); 
+            border-radius: var(--radius); 
+            color: #00fa9a; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            font-weight: 500; 
+            font-size: 13px; 
+            margin-bottom: 15px; 
+            gap: 10px; 
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; height: 100vh; overflow: hidden; }
+            .sidebar { width: 100%; height: auto; flex-direction: row; padding-top: 0; border-right: none; border-bottom: 1px solid var(--border-color); overflow-x: auto; justify-content: flex-start; white-space: nowrap; -webkit-overflow-scrolling: touch; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+            .sidebar::-webkit-scrollbar { display: none; }
+            .nav-btn { padding: 12px 18px; width: auto; flex-direction: row; font-size: 13px; gap: 8px; flex-shrink: 0; border-left: none; border-bottom: 3px solid transparent; }
+            .nav-btn span { font-size: 15px; }
+            .nav-btn:hover, .nav-btn.active { border-left: none; border-bottom: 3px solid var(--accent); background-color: rgba(255,255,255,0.05); }
+            .main-content { height: calc(100vh - 50px); overflow-y: auto; }
+            .header { flex-direction: column; align-items: flex-start; gap: 6px; }
+            .split-container { flex-direction: column; height: auto; }
+            .split-sidebar { width: 100%; max-height: 180px; overflow-y: auto; }
+            .split-viewer { height: 450px; width: 100%; }
+            #weather-module div[style*="display: flex"] { flex-direction: column !important; gap: 10px !important; }
+            #weather-module input[type="text"] { width: 100% !important; }
+            #ofp-loader-screen > div { flex-direction: column !important; gap: 8px !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="system-gate-overlay">
+        <div class="gate-panel">
+            <h3 style="color: var(--accent); margin-bottom: 8px;">WEB EFB SECURITY GATEWAY</h3>
+            <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">Indonesia Journey Virtual Operations System Terminal</p>
+            <div class="form-group" style="text-align: left; margin-bottom: 20px;">
+                <label for="pilot-sig-name">Pilot-in-Command Full Name</label>
+                <input type="text" id="pilot-sig-name" placeholder="e.g., Capt. Haris Nasution" style="margin-top: 4px;">
+            </div>
+            <button class="action-btn" style="width: 100%;" onclick="authorizeEfbAccess()">Initialize System Access</button>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <button id="nav-weather" class="nav-btn active" onclick="switchTab('weather')"><span>⛅</span>Weather</button>
+        <button id="nav-maps" class="nav-btn" onclick="switchTab('maps')"><span>🗺️</span>Charts</button>
+        <button id="nav-ofp" class="nav-btn" onclick="switchTab('ofp')"><span>📋</span>OFP</button>
+        <button id="nav-perf" class="nav-btn" onclick="switchTab('perf')"><span>⚡</span>Performance</button>
+        <button id="nav-manifest" class="nav-btn" onclick="switchTab('manifest')"><span>👥</span>Manifest</button>
+        <button id="nav-chk" class="nav-btn" onclick="switchTab('chk')"><span>✅</span>Checklist</button>
+        <button id="nav-notes" class="nav-btn" onclick="switchTab('notes')"><span>📝</span>Notes</button>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <h2 id="page-title">Aviation Weather</h2>
+            <div id="clock">00:00:00Z</div>
+        </div>
+
+        <div id="weather-module" class="module active">
+            <h3>Terminal Weather & TAFOR Analysis</h3>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="icao-input" placeholder="ICAO Code" maxlength="4" style="text-transform: uppercase;">
+                <button class="action-btn" onclick="fetchWeather()">Analyze Weather</button>
+            </div>
+            
+            <div id="weather-station-alert" class="station-alert-banner"></div>
+
+            <div id="weather-output-container" style="display: none;">
+                <h4 style="margin-top:20px; color: var(--accent);">METAR</h4>
+                <div id="metar-output" class="data-display"></div>
+                <h4 style="margin-top:20px; color: var(--accent);">TAFOR (Extended Aerodrome Forecast)</h4>
+                <div id="taf-output" class="data-display"></div>
+            </div>
+        </div>
+        
+        <div id="maps-module" class="module">
+            <div class="sub-navbar">
+                <button id="subtab-btn-charts-navigraph" class="sub-nav-btn active" onclick="switchChartsSubTab('navigraph')">Navigraph Portal</button>
+                <button id="subtab-btn-charts-server" class="sub-nav-btn" onclick="switchChartsSubTab('server')">Server Charts Directory</button>
+                <button id="subtab-btn-charts-local" class="sub-nav-btn" onclick="switchChartsSubTab('local')">Local PDF Terminal</button>
+            </div>
+
+            <div id="charts-navigraph-sub" class="sub-module-content active">
+                <h3>Navigraph Electronic Charts Cloud Link</h3>
+                <div style="text-align: center; padding: 40px; background:#111; border-radius:6px; border: 1px dashed #444;">
+                    <p style="margin-bottom: 20px;">External navigation frames are isolated for security sandbox configuration profiles.</p>
+                    <button class="action-btn" style="background-color: var(--navigraph-red);" onclick="window.open('https://charts.navigraph.com', '_blank')">Launch External Navigraph Cloud</button>
+                </div>
+            </div>
+
+            <div id="charts-server-sub" class="sub-module-content">
+                <h3>Server Contained Terminal Charts Library</h3>
+                <div class="split-container">
+                    <div class="split-sidebar" id="server-charts-tree"></div>
+                    <div class="split-viewer">
+                        <iframe id="server-charts-viewer" src="about:blank"></iframe>
+                        <div id="server-charts-placeholder" class="viewer-placeholder">Awaiting Data Tree Stream Selection</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="charts-local-sub" class="sub-module-content">
+                <h3>Local Device Terminal Document Sandbox</h3>
+                <div style="margin-bottom: 15px; background: #1a1a1a; padding: 12px; border-radius: 6px; border: 1px solid #333;">
+                    <label style="font-size:12px; font-weight:bold; color:var(--accent); display:block; margin-bottom:6px;">SELECT LOCAL CHART PDF FILE:</label>
+                    <input type="file" id="local-chart-input" accept="application/pdf" onchange="loadLocalChartFile(event)">
+                </div>
+                <div class="split-container">
+                    <div class="split-viewer">
+                        <iframe id="local-charts-viewer" src="about:blank"></iframe>
+                        <div id="local-charts-placeholder" class="viewer-placeholder">Upload an offline chart file</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="ofp-module" class="module">
+            <h3>SimBrief Operational Flight Plan</h3>
+            <div id="ofp-selection-screen" style="display: flex; gap: 15px;">
+                <button class="action-btn" onclick="showDispatcher()">Open Existing Dispatch</button>
+                <button class="action-btn" style="background-color: var(--navigraph-red);" onclick="window.open('https://dispatch.simbrief.com', '_blank')">New Dispatch</button>
+            </div>
+
+            <div id="ofp-loader-screen" style="display: none;">
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="text" id="simbrief-user" placeholder="SimBrief Pilot ID">
+                    <button class="action-btn" onclick="fetchSimBrief()">Parse Flight Log</button>
+                    <button class="action-btn" style="background-color: #555;" onclick="backToSelection()">Back</button>
+                </div>
+            </div>
+            <div id="ofp-status" style="margin-top: 5px; font-weight: bold; color: #ff9f43;"></div>
+            <div id="ofp-data-container" class="data-display" style="display: none;"></div>
+        </div>
+
+        <div id="perf-module" class="module">
+            <div class="sub-navbar">
+                <button id="subtab-btn-perf-takeoff" class="sub-nav-btn active" onclick="switchPerfSubTab('takeoff')">Takeoff Performance Profiles</button>
+                <button id="subtab-btn-perf-landing" class="sub-nav-btn" onclick="switchPerfSubTab('landing')">Landing Analysis Matrices</button>
+            </div>
+
+            <div id="p-detection-banner" class="auto-detect-badge" style="background: #1c252e; border-color: #007bff;">
+                <span>⚙️ ENGINE TELEMETRY STATUS:</span>
+                <span id="p-detected-type-label" style="font-family: monospace; font-weight: bold;">STANDBY — READ REQS DETECTED FROM SIMBRIEF DISPATCH</span>
+            </div>
+
+            <div id="p-weight-manifest-bar" style="margin-bottom: 15px; padding: 15px; background: #181818; border-radius: 6px; border: 1px solid #333; display: none; flex-direction: row; gap: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 150px;">
+                    <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Zero Fuel Weight (ZFW)</span>
+                    <div style="font-size: 15px; font-weight: bold; color: var(--res-color); margin-top: 4px;"><span id="w-zfw-kg">--- kg</span> | <span id="w-zfw-t">--- T</span></div>
+                </div>
+                <div style="flex: 1; min-width: 150px;">
+                    <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Est. Takeoff Weight (TOW)</span>
+                    <div style="font-size: 15px; font-weight: bold; color: var(--res-color); margin-top: 4px;"><span id="w-tow-kg">--- kg</span> | <span id="w-tow-t">--- T</span></div>
+                </div>
+                <div style="flex: 1; min-width: 150px;">
+                    <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Est. Landing Weight (LDW)</span>
+                    <div style="font-size: 15px; font-weight: bold; color: var(--res-color); margin-top: 4px;"><span id="w-ldw-kg">--- kg</span> | <span id="w-ldw-t">--- T</span></div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px; padding: 15px; background: #181818; border-radius: 6px; border: 1px solid #333; display: flex; align-items: center; gap: 15px;">
+                <div class="form-group" style="width: 100%; max-width: 400px; gap: 4px;">
+                    <label style="color: var(--accent); font-weight: bold;">Airframe Fleet Architecture (Locked to SimBrief)</label>
+                    <select id="p-global-aircraft" disabled>
+                        <option value="airbus" selected>Airbus Standard (A318/A319/A320/A321/A330/A350)</option>
+                        <option value="boeing">Boeing Standard (737/747/757/767/777/787)</option>
+                        <option value="atr">ATR Turboprop Series (ATR 42 / ATR 72)</option>
+                        <option value="fokker">Fokker Fleet Series (F50 / F70 / F100)</option>
+                        <option value="mcdonnell">McDonnell Douglas Series (MD-80/MD-90/MD-11)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="perf-takeoff-sub" class="sub-module-content active">
+                <div class="perf-layout-grid">
+                    <div class="perf-card">
+                        <h4 style="color: var(--accent); margin: 0; border-bottom: 1px solid #444; padding-bottom: 5px;">USER CONFIGURATION OPTIONS</h4>
+                        <div class="form-group">
+                            <label>Takeoff Flaps Configuration</label>
+                            <select id="p-to-flaps" onchange="calculateTakeoffPerformance()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Engine Bleed/Packs Setting</label>
+                            <select id="p-to-packs" onchange="calculateTakeoffPerformance()">
+                                <option value="ON" selected>AUTO / ON</option>
+                                <option value="OFF">OFF</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Thrust Rating Configuration</label>
+                            <select id="p-to-thrust" onchange="calculateTakeoffPerformance()">
+                                <option value="TOGA" selected>TOGA / MAX POWER</option>
+                                <option value="FLEX">FLEX / DERATED (Assumed Temp)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="perf-card" style="border-color: var(--accent);">
+                        <h4 style="color: var(--accent); margin: 0; border-bottom: 1px solid #444; padding-bottom: 5px;">TARGET SPEED MATRIX COMPARISON</h4>
+                        <div class="perf-field" style="font-weight: bold; color: var(--text-muted); font-size: 11px; text-transform: uppercase; padding: 4px 0;">
+                            <span>Metric Schedule</span>
+                            <span style="width: 80px; text-align: right;">OFP Plan</span>
+                            <span style="width: 100px; text-align: right;">EFB Optimized</span>
+                        </div>
+                        <div class="perf-field">
+                            <span>V1 (Decision Speed)</span>
+                            <span id="p-to-v1-ofp" style="font-family: monospace; color: #777; width: 80px; text-align: right;">--- KT</span>
+                            <span id="p-to-v1-res" class="res-val" style="width: 100px; text-align: right;">--- KT</span>
+                        </div>
+                        <div class="perf-field">
+                            <span>VR (Rotation Speed)</span>
+                            <span id="p-to-vr-ofp" style="font-family: monospace; color: #777; width: 80px; text-align: right;">--- KT</span>
+                            <span id="p-to-vr-res" class="res-val" style="width: 100px; text-align: right;">--- KT</span>
+                        </div>
+                        <div class="perf-field">
+                            <span>V2 (Safety Climb Speed)</span>
+                            <span id="p-to-v2-ofp" style="font-family: monospace; color: #777; width: 80px; text-align: right;">--- KT</span>
+                            <span id="p-to-v2-res" class="res-val" style="width: 100px; text-align: right;">--- KT</span>
+                        </div>
+                        <div class="perf-field" style="border-top: 1px dashed #444; margin-top: 5px; padding-top: 15px;">
+                            <span>Assumed Flex Temperature</span>
+                            <span></span>
+                            <span id="p-to-flex-res" class="res-val" style="color: #ff9f43; width: 100px; text-align: right;">---</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="perf-landing-sub" class="sub-module-content">
+                <div class="perf-layout-grid">
+                    <div class="perf-card">
+                        <h4 style="color: var(--success); margin: 0; border-bottom: 1px solid #444; padding-bottom: 5px;">USER CONFIGURATION OPTIONS</h4>
+                        <div class="form-group">
+                            <label>Landing Flaps Schedule</label>
+                            <select id="p-ld-flaps" onchange="calculateLandingPerformance()"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Thrust Reversers Target</label>
+                            <select id="p-ld-rev" onchange="calculateLandingPerformance()">
+                                <option value="MAX" selected>MAX REVERSE OPERATIONAL</option>
+                                <option value="IDLE">IDLE REVERSE ONLY</option>
+                                <option value="INOP">INOPERATIVE / DEPLOYMENT DELAY</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Autobrake Deceleration Mode</label>
+                            <select id="p-ld-brake" onchange="calculateLandingPerformance()">
+                                <option value="OFF">OFF</option>
+                                <option value="LO">LO / MIN</option>
+                                <option value="MED" selected>MED / MEDIUM</option>
+                                <option value="HI">HI / MAX</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="perf-card" style="border-color: var(--success);">
+                        <h4 style="color: var(--success); margin: 0; border-bottom: 1px solid #444; padding-bottom: 5px;">SIMBRIEF CALCULATED RESULTS</h4>
+                        <div class="perf-field"><span>Required Landing Distance</span><span id="p-ld-dist-res" class="res-val" style="color: #28a745;">--- M</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="manifest-module" class="module">
+            <h3>Flight Security Manifest Summary</h3>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:15px;">Auto-generated load sheet based on operational SimBrief dispatch configuration telemetry records.</p>
+            
+            <div class="manifest-table-wrapper">
+                <table class="manifest-table">
+                    <thead>
+                        <tr>
+                            <th>Manifest ID</th>
+                            <th>Full Legal Name</th>
+                            <th>Assignment / Role</th>
+                            <th>Declared Nationality</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manifest-table-body">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="chk-module" class="module">
+            <h3>Server Document Checklist Browser</h3>
+            <div class="split-container">
+                <div class="split-sidebar" id="checklist-tree"></div>
+                <div class="split-viewer">
+                    <iframe id="checklist-pdf-viewer" src="about:blank"></iframe>
+                    <div id="viewer-placeholder" class="viewer-placeholder">Awaiting Document Tree Selection</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="notes-module" class="module">
+            <h3>ATC Scratchpad & Flight Notes</h3>
+            <textarea id="scratchpad" placeholder="Type routing clearances, ATIS data, or layout changes here..." oninput="saveNotes()"></textarea>
+        </div>
+    </div>
+
+    <script>
+        const serverChecklistDirectory = <?php echo json_encode($structure); ?>;
+        const serverChartsDirectory = <?php echo json_encode($chartsStructure); ?>;
+
+        let commanderName = "Capt. Standby Pilot";
+
+        let baselineTakeoffSpeeds = { v1: 142, vr: 145, v2: 149 };
+        let baselineLandingDistance = 1720;
+        let flightDataLoaded = false;
+        let activePassengerCount = 124; 
+
+        const weatherStationRegistryFallbacks = {
+            "WICC": "WIII", "WIHH": "WIII", "WARI": "WARR", 
+            "WIPP": "WIMM", "WAWW": "WAAA", "WIPL": "WIMM"
+        };
+
+        const indoMaleFirst = ["Budi", "Joko", "Agus", "Andi", "Rizky", "Aditya", "Pratama", "Hidayat", "Saputra", "Eko", "Tri", "Wawan", "Hendra", "Aris", "Dimas", "Ahmad", "Ilham", "Guntur", "Fajar", "Rian", "Bambang", "Dedi", "Heri", "Roni", "Taufik", "Suryo", "Anwar", "Hafiz", "Reza", "Bayu", "Doni", "Farhan", "Kevin", "Rudi", "Cecep", "Asep", "Irfan", "Arie", "Dani", "Yusuf", "Hendro", "Setyo", "Teguh", "Gunadi", "Satria", "Bagus", "Fikri", "Zaki", "Rahmat", "Zul", "Akbar"];
+        const indoFemaleFirst = ["Siti", "Sri", "Dian", "Putri", "Sari", "Kartika", "Dewi", "Aulia", "Megawati", "Indah", "Rina", "Anisa", "Fitri", "Yanti", "Eka", "Maya", "Dwi", "Novi", "Wulan", "Ayu", "Lestari", "Siska", "Citra", "Nadia", "Amalia", "Intan", "Gita", "Dina", "Melati", "Chandra", "Viona", "Tari", "Sarah", "Amanda", "Anggraini", "Bella", "Nanda", "Ratih", "Shinta", "Niken", "Pratiwi", "Utami", "Widya", "Endah", "Ratna", "Santi", "Siska", "Dwi", "Puspita", "Wati", "Mega"];
+        const indoLastNames = ["Wijaya", "Kusuma", "Santoso", "Siregar", "Nasution", "Hutapea", "Prakasa", "Gunawan", "Sutrisno", "Wibowo", "Budiman", "Setiawan", "Utami", "Lestari", "Mulyono", "Suhendra", "Zulkarnain", "Tanjung", "Pane", "Siddiq", "Habibie", "Yudhoyono", "Simanjuntak", "Pangaribuan", "Lubis", "Pasaribu", "Ginting", "Sembiring", "Tarigan", "Prasetyo", "Nugroho", "Pramono", "Haryanto", "Sudarsono", "Wicaksono", "Saputro", "Kurniawan", "Saraswati", "Palupi", "Hartono", "Salim", "Widjaja", "Riady", "Makarim", "Thohir", "Sadikin", "Purnama", "Subagyo", "Pradipta", "Suwondo", "Wahyudi", "Laksana"];
+        
+        const foreignNamesDatabase = [
+            { name: "John Smith", nat: "United States" }, { name: "Hans Müller", nat: "Germany" },
+            { name: "Takashi Tanaka", nat: "Japan" }, { name: "David Campbell", nat: "United Kingdom" },
+            { name: "Chloe Laurent", nat: "France" }, { name: "Zhang Wei", nat: "China" },
+            { name: "Kim Min-jun", nat: "South Korea" }, { name: "Emily Watson", nat: "Australia" },
+            { name: "Aravind Sharma", nat: "India" }, { name: "Carlos Henrique", nat: "Brazil" },
+            { name: "James Anderson", nat: "Canada" }, { name: "Sarah Jenkins", nat: "New Zealand" },
+            { name: "Michael O'Connor", nat: "Ireland" }, { name: "Liam Johansson", nat: "Sweden" },
+            { name: "Elena Petrova", nat: "Russia" }, { name: "Santiago Garcia", nat: "Spain" },
+            { name: "Giuseppe Rossi", nat: "Italy" }, { name: "Ahmed Al-Mansoor", nat: "United Arab Emirates" },
+            { name: "Yuki Sato", nat: "Japan" }, { name: "Min-Ji Kim", nat: "South Korea" },
+            { name: "Oliver Bennett", nat: "United Kingdom" }, { name: "Sophie Dubois", nat: "France" },
+            { name: "Lucas Silva", nat: "Brazil" }, { name: "Alejandro Martinez", nat: "Mexico" },
+            { name: "William Clark", nat: "Australia" }, { name: "Emma Fischer", nat: "Austria" },
+            { name: "Arthur Pendelton", nat: "United Kingdom" }, { name: "Daniel Varga", nat: "Hungary" },
+            { name: "Sofia Novak", nat: "Slovakia" }, { name: "Noah Lindstrom", nat: "Norway" },
+            { name: "Charlotte Taylor", nat: "Canada" }, { name: "Mateo Fernandez", nat: "Argentina" },
+            { name: "Alexander Wright", nat: "United States" }, { name: "Freja Nielsen", nat: "Denmark" }
+        ];
+
+        const operationalFlapsProfiles = {
+            airbus: {
+                takeoff: [{ val: "1", label: "CONF 1 (1+F)" }, { val: "2", label: "CONF 2" }, { val: "3", label: "CONF 3" }],
+                landing: [{ val: "3", label: "CONF 3" }, { val: "FULL", label: "CONF FULL" }]
+            },
+            boeing: {
+                takeoff: [{ val: "1", label: "FLAPS 1" }, { val: "5", label: "FLAPS 5" }, { val: "10", label: "FLAPS 10" }, { val: "15", label: "FLAPS 15" }, { val: "25", label: "FLAPS 25" }],
+                landing: [{ val: "15", label: "FLAPS 15" }, { val: "30", label: "FLAPS 30" }, { val: "40", label: "FLAPS 40" }]
+            },
+            atr: {
+                takeoff: [{ val: "15", label: "FLAPS 15° (Standard)" }],
+                landing: [{ val: "15", label: "FLAPS 15° (Icing)" }, { val: "30", label: "FLAPS 30° (Full)" }]
+            },
+            fokker: {
+                takeoff: [{ val: "0", label: "FLAPS 0°" }, { val: "8", label: "FLAPS 8°" }, { val: "15", label: "FLAPS 15°" }],
+                landing: [{ val: "25", label: "FLAPS 25°" }, { val: "42", label: "FLAPS 42°" }]
+            },
+            mcdonnell: {
+                takeoff: [{ val: "11", label: "DIAL-A-FLAP 11°" }, { val: "15", label: "DIAL-A-FLAP 15°" }, { val: "18", label: "DIAL-A-FLAP 18°" }, { val: "22", label: "DIAL-A-FLAP 22°" }],
+                landing: [{ val: "28", label: "FLAPS 28°" }, { val: "35", label: "FLAPS 35°" }, { val: "50", label: "FLAPS 50°" }]
+            }
+        };
+
+        function clearPerformanceAndManifestData() {
+            // Reset weights UI components
+            document.getElementById('w-zfw-kg').textContent = "--- kg";
+            document.getElementById('w-zfw-t').textContent = "--- T";
+            document.getElementById('w-tow-kg').textContent = "--- kg";
+            document.getElementById('w-tow-t').textContent = "--- T";
+            document.getElementById('w-ldw-kg').textContent = "--- kg";
+            document.getElementById('w-ldw-t').textContent = "--- T";
+            document.getElementById('p-weight-manifest-bar').style.display = 'none';
+
+            // Reset performance values layout tracking
+            document.getElementById('p-to-v1-ofp').textContent = "--- KT";
+            document.getElementById('p-to-vr-ofp').textContent = "--- KT";
+            document.getElementById('p-to-v2-ofp').textContent = "--- KT";
+            document.getElementById('p-to-v1-res').textContent = "--- KT";
+            document.getElementById('p-to-vr-res').textContent = "--- KT";
+            document.getElementById('p-to-v2-res').textContent = "--- KT";
+            document.getElementById('p-to-flex-res').textContent = "---";
+            document.getElementById('p-ld-dist-res').textContent = "--- M";
+
+            // Reset internal script variables back to stock
+            baselineTakeoffSpeeds = { v1: 142, vr: 145, v2: 149 };
+            baselineLandingDistance = 1720;
+
+            // Purge manifest table view
+            document.getElementById('manifest-table-body').innerHTML = '';
+            
+            // Revert engine detection bar banner state
+            document.getElementById('p-detected-type-label').textContent = "STANDBY — READ REQS DETECTED FROM SIMBRIEF DISPATCH";
+            const banner = document.getElementById('p-detection-banner');
+            banner.style.background = "#1c252e"; 
+            banner.style.borderColor = "#007bff";
+        }
+
+        function authorizeEfbAccess() {
+            const nameInput = document.getElementById('pilot-sig-name').value.trim();
+            if(!nameInput) return alert("Pilot Signature validation required to access operational modules.");
+            
+            commanderName = nameInput.startsWith("Capt.") ? nameInput : "Capt. " + nameInput;
+            document.getElementById('system-gate-overlay').style.display = 'none';
+            clearPerformanceAndManifestData();
+            generateFlightManifestEngine();
+        }
+
+        function generateIndonesianName(gender = null) {
+            let firstPool = (gender === 'M') ? indoMaleFirst : (gender === 'F' ? indoFemaleFirst : (Math.random() < 0.5 ? indoMaleFirst : indoFemaleFirst));
+            const first = firstPool[Math.floor(Math.random() * firstPool.length)];
+            const last = indoLastNames[Math.floor(Math.random() * indoLastNames.length)];
+            return first + " " + last;
+        }
+
+        function generateFlightManifestEngine() {
+            const tbody = document.getElementById('manifest-table-body');
+            tbody.innerHTML = '';
+            let idCounter = 101;
+
+            appendManifestRow(idCounter++, commanderName, "Captain (PIC)", "Indonesia", "badge-crew");
+            appendManifestRow(idCounter++, "F/O " + generateIndonesianName('M'), "First Officer (SIC)", "Indonesia", "badge-crew");
+            
+            const faCount = activePassengerCount > 100 ? 5 : 3;
+            for(let i = 1; i <= faCount; i++) {
+                let faGender = (Math.random() < 0.80) ? 'F' : 'M';
+                appendManifestRow(idCounter++, "FA " + generateIndonesianName(faGender), `Flight Attendant #${i}`, "Indonesia", "badge-crew");
+            }
+
+            for(let p = 1; p <= activePassengerCount; p++) {
+                let pName = (Math.random() > 0.88) ? "" : generateIndonesianName();
+                let pNat = "Indonesia";
+
+                if (pName === "") {
+                    const foreignAsset = foreignNamesDatabase[Math.floor(Math.random() * foreignNamesDatabase.length)];
+                    pName = foreignAsset.name; pNat = foreignAsset.nat;
+                }
+                appendManifestRow(idCounter++, pName, "Passenger", pNat, "badge-pax");
+            }
+        }
+
+        function appendManifestRow(id, name, role, nationality, badgeClass) {
+            const tbody = document.getElementById('manifest-table-body');
+            if(!tbody) return;
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td style="font-family: monospace; font-weight: bold; color: #888;">#${id}</td>
+                <td style="font-weight: 500;">${name}</td>
+                <td><span class="manifest-badge ${badgeClass}">${role}</span></td>
+                <td style="color: var(--text-muted); font-size:13px;">🇮🇩 ${nationality}</td>
+            `;
+            if (nationality !== "Indonesia") row.querySelector('td:last-child').textContent = `🌐 ${nationality}`;
+            tbody.appendChild(row);
+        }
+
+        function syncAirframeArchitecture() {
+            const selectedFleet = document.getElementById('p-global-aircraft').value;
+            const toFlapsMenu = document.getElementById('p-to-flaps');
+            const ldFlapsMenu = document.getElementById('p-ld-flaps');
+
+            toFlapsMenu.innerHTML = ''; ldFlapsMenu.innerHTML = '';
+
+            operationalFlapsProfiles[selectedFleet].takeoff.forEach(f => {
+                let opt = document.createElement('option'); opt.value = f.val; opt.textContent = f.label;
+                toFlapsMenu.appendChild(opt);
+            });
+            operationalFlapsProfiles[selectedFleet].landing.forEach(f => {
+                let opt = document.createElement('option'); opt.value = f.val; opt.textContent = f.label;
+                ldFlapsMenu.appendChild(opt);
+            });
+
+            calculateTakeoffPerformance();
+            calculateLandingPerformance();
+        }
+
+        function buildDataTree(dataSource, containerId, viewerId, placeholderId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            if (!dataSource || dataSource.length === 0) {
+                container.innerHTML = `<div style="color:#666; font-size:12px; padding:10px; font-style:italic;">No files detected in directory.</div>`;
+                return;
+            }
+            dataSource.forEach(dir => {
+                const title = document.createElement('div'); title.className = 'tree-folder-title'; title.textContent = `📁 ${dir.folder}`;
+                container.appendChild(title);
+                dir.files.forEach(file => {
+                    const lnk = document.createElement('div'); lnk.className = 'tree-file-link'; lnk.textContent = `📄 ${file.name}`;
+                    lnk.onclick = () => {
+                        document.querySelectorAll(`#${containerId} .tree-file-link`).forEach(el => el.classList.remove('active'));
+                        lnk.classList.add('active');
+                        document.getElementById(placeholderId).style.display = 'none';
+                        document.getElementById(viewerId).src = file.path;
+                    };
+                    container.appendChild(lnk);
+                });
+            });
+        }
+
+        function switchChartsSubTab(subTab) {
+            document.querySelectorAll('#maps-module .sub-module-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#maps-module .sub-nav-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(`charts-${subTab}-sub`).classList.add('active');
+            document.getElementById(`subtab-btn-charts-${subTab}`).classList.add('active');
+            if(subTab === 'server') buildDataTree(serverChartsDirectory, 'server-charts-tree', 'server-charts-viewer', 'server-charts-placeholder');
+        }
+
+        function switchPerfSubTab(subTab) {
+            document.querySelectorAll('#perf-module .sub-module-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#perf-module .sub-nav-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(`perf-${subTab}-sub`).classList.add('active');
+            document.getElementById(`subtab-btn-perf-${subTab}`).classList.add('active');
+        }
+
+        function calculateTakeoffPerformance() {
+            const fleet = document.getElementById('p-global-aircraft').value;
+            const flapValue = document.getElementById('p-to-flaps').value;
+            const packValue = document.getElementById('p-to-packs').value;
+            const thrustValue = document.getElementById('p-to-thrust').value;
+
+            let modV1 = baselineTakeoffSpeeds.v1;
+            let modVR = baselineTakeoffSpeeds.vr;
+            let modV2 = baselineTakeoffSpeeds.v2;
+
+            if (fleet === "airbus") {
+                if (flapValue === "1") { modV1 += 2; modVR += 2; modV2 += 1; }
+                else if (flapValue === "3") { modV1 -= 3; modVR -= 2; modV2 -= 2; }
+            } else if (fleet === "boeing") {
+                if (flapValue === "1") { modV1 += 5; modVR += 4; modV2 += 4; }
+                else if (flapValue === "15") { modV1 -= 2; modVR -= 2; modV2 -= 1; }
+                else if (flapValue === "25") { modV1 -= 5; modVR -= 4; modV2 -= 3; }
+            } else if (fleet === "atr") {
+                modV1 = Math.min(modV1, 115); modVR = Math.min(modVR, 118); modV2 = Math.min(modV2, 122);
+            } else if (fleet === "fokker") {
+                if (flapValue === "0") { modV1 += 4; modVR += 3; modV2 += 2; }
+                else if (flapValue === "15") { modV1 -= 2; modVR -= 2; modV2 -= 1; }
+            } else if (fleet === "mcdonnell") {
+                if (flapValue === "11") { modV1 += 3; modVR += 2; modV2 += 2; }
+                else if (flapValue === "22") { modV1 -= 4; modVR -= 4; modV2 -= 3; }
+            }
+
+            if (packValue === "OFF") { modV1 -= 1; modVR -= 1; }
+
+            let flexTempDisplay = "---";
+            if (thrustValue === "TOGA") {
+                flexTempDisplay = "N/A (MAX POWER)";
+            } else if (thrustValue === "FLEX") {
+                let baseFlex = (fleet === "atr" || fleet === "fokker") ? 42 : 46; 
+                if (packValue === "OFF") baseFlex += 4; 
+                modV1 += 2; modVR += 1;
+                flexTempDisplay = `+${baseFlex}°C`;
+            }
+
+            document.getElementById('p-to-v1-res').textContent = `${modV1} KT`;
+            document.getElementById('p-to-vr-res').textContent = `${modVR} KT`;
+            document.getElementById('p-to-v2-res').textContent = `${modV2} KT`;
+            document.getElementById('p-to-flex-res').textContent = flexTempDisplay;
+        }
+
+        function calculateLandingPerformance() {
+            const fleet = document.getElementById('p-global-aircraft').value;
+            const flapValue = document.getElementById('p-ld-flaps').value;
+            const revValue = document.getElementById('p-ld-rev').value;
+            const brakeValue = document.getElementById('p-ld-brake').value;
+
+            let finalDistance = baselineLandingDistance;
+
+            if (fleet === "airbus") {
+                if (flapValue === "3") finalDistance += 160;
+            } else if (fleet === "boeing") {
+                if (flapValue === "15") finalDistance += 290;
+                else if (flapValue === "40") finalDistance -= 60;
+            } else if (fleet === "atr") {
+                finalDistance = Math.round(finalDistance * 0.65); 
+                if (flapValue === "15") finalDistance += 140;
+            } else if (fleet === "fokker") {
+                if (flapValue === "25") finalDistance += 150;
+            } else if (fleet === "mcdonnell") {
+                if (flapValue === "28") finalDistance += 220;
+                else if (flapValue === "50") finalDistance -= 80;
+            }
+
+            if (revValue === "IDLE") finalDistance += 120;
+            else if (revValue === "INOP") finalDistance += 310;
+
+            if (brakeValue === "OFF") finalDistance += 650;
+            else if (brakeValue === "LO") finalDistance += 380;
+            else if (brakeValue === "HI") finalDistance -= 280;
+
+            document.getElementById('p-ld-dist-res').textContent = `${Math.round(finalDistance)} M`;
+        }
+
+        function loadLocalChartFile(event) {
+            const file = event.target.files[0];
+            if (file && file.type === "application/pdf") {
+                const objectUrl = URL.createObjectURL(file);
+                document.getElementById('local-charts-placeholder').style.display = 'none';
+                document.getElementById('local-charts-viewer').src = objectUrl;
+            } else {
+                alert("Please select a valid local PDF file.");
+            }
+        }
+
+        function updateClock() { document.getElementById('clock').textContent = new Date().toISOString().substring(11, 19) + 'Z'; }
+        setInterval(updateClock, 1000); updateClock();
+
+        function switchTab(tab) {
+            document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab + '-module').classList.add('active');
+            document.getElementById('nav-' + tab).classList.add('active');
+            
+            if(tab === 'chk') buildDataTree(serverChecklistDirectory, 'checklist-tree', 'checklist-pdf-viewer', 'viewer-placeholder');
+
+            const titles = { 
+                'weather': 'Aviation Weather', 'maps': 'Electronic Charts Portal', 
+                'ofp': 'SimBrief Operational Flight Plan', 'perf': 'Performance Analysis Matrix', 
+                'manifest': 'Passenger & Crew Security Manifest', 'chk': 'Document Checklist Browser', 
+                'notes': 'Pilot Scratchpad' 
+            };
+            document.getElementById('page-title').textContent = titles[tab];
+        }
+
+        function showDispatcher() {
+            document.getElementById('ofp-selection-screen').style.display = 'none';
+            document.getElementById('ofp-loader-screen').style.display = 'block';
+        }
+
+        function backToSelection() {
+            document.getElementById('ofp-selection-screen').style.display = 'flex';
+            document.getElementById('ofp-loader-screen').style.display = 'none';
+        }
+
+        window.onload = function() { 
+            syncAirframeArchitecture();
+            if(localStorage.getItem("efb_notes")) { document.getElementById("scratchpad").value = localStorage.getItem("efb_notes"); } 
+        };
+        function saveNotes() { localStorage.setItem("efb_notes", document.getElementById("scratchpad").value); }
+
+        function fetchWeather() {
+            const icao = document.getElementById('icao-input').value.toUpperCase().trim();
+            if (icao.length !== 4) return alert("Please specify a valid 4-letter ICAO station.");
+            
+            const alertBanner = document.getElementById('weather-station-alert');
+            const outputContainer = document.getElementById('weather-output-container');
+            const metarBox = document.getElementById('metar-output');
+            const tafBox = document.getElementById('taf-output');
+
+            outputContainer.style.display = 'block'; alertBanner.style.display = 'none';
+            metarBox.textContent = "Querying regional telemetry data...";
+            tafBox.textContent = "Compiling complete TAFOR trend forecast variables...";
+
+            setTimeout(() => {
+                const day = new Date().getUTCDate().toString().padStart(2, '0');
+                const hr = new Date().getUTCHours().toString().padStart(2, '0');
+                let sourceStation = weatherStationRegistryFallbacks[icao] ? weatherStationRegistryFallbacks[icao] : icao;
+
+                if (weatherStationRegistryFallbacks[icao]) {
+                    alertBanner.innerHTML = `⚠️ <strong>STATION LOG NOTIFICATION:</strong> ${icao} does not have a dedicated meteorological equipment station. Weather data below is sourced via reporting hub <strong>${sourceStation}</strong>.`;
+                    alertBanner.style.display = 'block';
+                }
+
+                let hrStart = parseInt(hr);
+                let hrEnd = (hrStart + 24) % 24;
+                let dayEnd = hrStart + 24 >= 24 ? parseInt(day) + 1 : parseInt(day);
+
+                metarBox.textContent = `${sourceStation} ${day}${hrStart.toString().padStart(2, '0')}53Z 24014KT 9999 BKN035 FEW080 28/22 Q1013 NOSIG`;
+                tafBox.textContent = `TAF ${sourceStation} ${day}${hrStart.toString().padStart(2, '0')}30Z ${day}${hrStart.toString().padStart(2, '0')}/${dayEnd.toString().padStart(2, '0')}${hrEnd.toString().padStart(2, '0')}\n` +
+                                      `  24015KT 9999 BKN030 FEW100\n` +
+                                      `  BECMG ${day}${String((hrStart+3)%24).padStart(2,'0')}/${day}${String((hrStart+5)%24).padStart(2,'0')} 26018G26KT BKN025\n` +
+                                      `  TEMPO ${day}14/${day}18 4000 -RA TSRA FEW020CB BKN022\n` +
+                                      `  FM${dayEnd.toString().padStart(2, '0')}0100Z 29010KT 9999 SCT030 SCT090\n` +
+                                      `  BECMG ${dayEnd.toString().padStart(2, '0')}06/${dayEnd.toString().padStart(2, '0')}08 22008KT FEW030 NOSIG`;
+            }, 600);
+        }
+
+        function resolveField(root, key, fallback = "") {
+            if (!root || root[key] === undefined) return fallback;
+            if (typeof root[key] === 'object' && root[key] !== null && root[key].value !== undefined) return root[key].value;
+            return root[key];
+        }
+
+        async function fetchSimBrief() {
+            const user = document.getElementById('simbrief-user').value.trim();
+            const status = document.getElementById('ofp-status');
+            const container = document.getElementById('ofp-data-container');
+            if (!user) return alert("Pilot Identification missing.");
+            
+            status.textContent = "Connecting to SimBrief Core API Engine...";
+            container.style.display = 'none';
+            
+            // Clear prior dataset to keep execution scope clear
+            clearPerformanceAndManifestData();
+
+            try {
+                const res = await fetch(`https://www.simbrief.com/api/xml.fetcher.php?username=${encodeURIComponent(user)}&json=v2`);
+                if (!res.ok) throw new Error(`HTTP Error Status: ${res.status}`);
+                const data = await res.json();
+                if (data.error) throw new Error(`SimBrief System Response: ${data.error}`);
+
+                let flightPlanText = data.text?.plan_html || data.text?.plan_text;
+                if (!flightPlanText) throw new Error("Log verification error: Could not load data files.");
+
+                const dispatchersList = ["Zulfachri Harahap", "Alga Putra", "Gerry Soejatman", "Tristan Liu"];
+                const selectedDispatcher = dispatchersList[Math.floor(Math.random() * dispatchersList.length)];
+                const cleanCommander = commanderName.replace("Capt. ", "").toUpperCase();
+                const cleanDispatcher = selectedDispatcher.toUpperCase();
+
+                flightPlanText = flightPlanText.replace(/\b(CAPT|CAPTAIN|PIC)(?:\s*[\/:]\s*|\s+)([A-Z0-9\s\.\-\/]{2,30})(?=\s{2,}|\n|<)/gi, (m, label) => {
+                    let separator = m.includes('/') ? '/' : (m.includes(':') ? ': ' : ' ');
+                    return label + separator + cleanCommander;
+                });
+                flightPlanText = flightPlanText.replace(/\b(DISP|DISPATCHER)(?:\s*[\/:]\s*|\s+)([A-Z0-9\s\.\-\/]{2,30})(?=\s{2,}|\n|<)/gi, (m, label) => {
+                    let separator = m.includes('/') ? '/' : (m.includes(':') ? ': ' : ' ');
+                    return label + separator + cleanDispatcher;
+                });
+
+                container.innerHTML = flightPlanText;
+                container.style.display = 'block';
+                status.textContent = "Flight data loaded successfully.";
+
+                const standardIcaoType = resolveField(data.aircraft, 'icaocode').toUpperCase();
+                const cleanName = resolveField(data.aircraft, 'name').toUpperCase();
+                const globalSelect = document.getElementById('p-global-aircraft');
+                let detectedManufacturer = "boeing"; 
+                let labelText = `AUTO-DETECTED RUNTIME: BOEING PROFILE ARCHITECTURE INITIALIZED [${standardIcaoType}]`;
+
+                if (standardIcaoType.startsWith('A3') || standardIcaoType.startsWith('A2') || standardIcaoType.startsWith('A35') || standardIcaoType.startsWith('A38')) {
+                    detectedManufacturer = 'airbus';
+                    labelText = `AUTO-DETECTED RUNTIME: AIRBUS CONF SETTINGS INITIALIZED [${standardIcaoType} - ${cleanName}]`;
+                } else if (standardIcaoType.startsWith('B7') || standardIcaoType.startsWith('B3') || standardIcaoType.startsWith('BC')) {
+                    detectedManufacturer = 'boeing';
+                    labelText = `AUTO-DETECTED RUNTIME: BOEING FLAPS SETTINGS INITIALIZED [${standardIcaoType} - ${cleanName}]`;
+                } else if (standardIcaoType.startsWith('AT') || standardIcaoType.startsWith('ATR')) {
+                    detectedManufacturer = 'atr';
+                    labelText = `AUTO-DETECTED RUNTIME: ATR TURBOPROP PERFORMANCE ACTIVE [${standardIcaoType} - ${cleanName}]`;
+                } else if (standardIcaoType.startsWith('F') && !standardIcaoType.startsWith('FA')) {
+                    detectedManufacturer = 'fokker';
+                    labelText = `AUTO-DETECTED RUNTIME: FOKKER SYSTEM ARCHITECTURE INITIALIZED [${standardIcaoType} - ${cleanName}]`;
+                } else if (standardIcaoType.startsWith('MD') || standardIcaoType.startsWith('DC') || standardIcaoType === 'B712') {
+                    detectedManufacturer = 'mcdonnell';
+                    labelText = `AUTO-DETECTED RUNTIME: MCDONNELL DOUGLAS DIAL-A-FLAP ACTIVE [${standardIcaoType} - ${cleanName}]`;
+                }
+
+                globalSelect.value = detectedManufacturer;
+                const banner = document.getElementById('p-detection-banner');
+                banner.style.background = "#1b2a1e"; banner.style.borderColor = "#28a745";
+                document.getElementById('p-detected-type-label').textContent = labelText;
+                
+                let weightUnit = resolveField(data.params, 'weight_unit', 'kgs').toLowerCase();
+                let estZFW = parseFloat(resolveField(data.weights, 'est_zfw', '0'));
+                let estTOW = parseFloat(resolveField(data.weights, 'est_tow', '0'));
+                let estLDW = parseFloat(resolveField(data.weights, 'est_ldw', '0'));
+
+                if (weightUnit === 'lbs') {
+                    estZFW = Math.round(estZFW * 0.45359237);
+                    estTOW = Math.round(estTOW * 0.45359237);
+                    estLDW = Math.round(estLDW * 0.45359237);
+                }
+
+                document.getElementById('w-zfw-kg').textContent = estZFW.toLocaleString() + " kg";
+                document.getElementById('w-zfw-t').textContent = (estZFW / 1000).toFixed(2) + " T";
+                document.getElementById('w-tow-kg').textContent = estTOW.toLocaleString() + " kg";
+                document.getElementById('w-tow-t').textContent = (estTOW / 1000).toFixed(2) + " T";
+                document.getElementById('w-ldw-kg').textContent = estLDW.toLocaleString() + " kg";
+                document.getElementById('w-ldw-t').textContent = (estLDW / 1000).toFixed(2) + " T";
+                document.getElementById('p-weight-manifest-bar').style.display = 'flex';
+
+                activePassengerCount = parseInt(resolveField(data.general, 'passengers', '124'));
+                generateFlightManifestEngine();
+
+                // High-fidelity target parsing logic extraction array for V-speeds
+                let ofpV1 = parseInt(resolveField(data.vspeeds, 'v1', 0));
+                let ofpVR = parseInt(resolveField(data.vspeeds, 'vr', 0));
+                let ofpV2 = parseInt(resolveField(data.vspeeds, 'v2', 0));
+
+                // Fallback scan routine reading from structured flight plan blocks to clear data-mismatches
+                if (!ofpV1 || !ofpVR || !ofpV2) {
+                    const v1Match = flightPlanText.match(/\bV1\b[\s\.\:\/\=\-]+(\d{2,3})/i);
+                    const vrMatch = flightPlanText.match(/\bVR\b[\s\.\:\/\=\-]+(\d{2,3})/i);
+                    const v2Match = flightPlanText.match(/\bV2\b[\s\.\:\/\=\-]+(\d{2,3})/i);
+                    
+                    ofpV1 = v1Match ? parseInt(v1Match[1]) : (detectedManufacturer === 'atr' || detectedManufacturer === 'fokker' ? 112 : 142);
+                    ofpVR = vrMatch ? parseInt(vrMatch[1]) : (detectedManufacturer === 'atr' || detectedManufacturer === 'fokker' ? 115 : 145);
+                    ofpV2 = v2Match ? parseInt(v2Match[1]) : (detectedManufacturer === 'atr' || detectedManufacturer === 'fokker' ? 120 : 149);
+                }
+
+                baselineTakeoffSpeeds.v1 = ofpV1;
+                baselineTakeoffSpeeds.vr = ofpVR;
+                baselineTakeoffSpeeds.v2 = ofpV2;
+
+                document.getElementById('p-to-v1-ofp').textContent = `${ofpV1} KT`;
+                document.getElementById('p-to-vr-ofp').textContent = `${ofpVR} KT`;
+                document.getElementById('p-to-v2-ofp').textContent = `${ofpV2} KT`;
+
+                const baseElevation = parseInt(resolveField(data.destination, 'elevation', 0));
+                baselineLandingDistance = baseElevation + (detectedManufacturer === 'atr' || detectedManufacturer === 'fokker' ? 1250 : 1720); 
+
+                syncAirframeArchitecture();
+                flightDataLoaded = true;
+
+            } catch (e) {
+                status.textContent = "Parsing Exception: " + e.message;
+                console.error("EFB Diagnostic Trace:", e);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+/ui/node_modules/
+/ui/dist/
+.env
+.env.*
+.DS_Store
+error_log
+/ops/ui/
+/ops/ijv-efb-dispatch/.git-upstream/
+__pycache__/

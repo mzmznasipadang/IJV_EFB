@@ -1,0 +1,39 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${EFB_PORT:-8081}:80"
+    environment:
+      VAMSYS_CLIENT_ID: "${VAMSYS_CLIENT_ID:-867}"
+      VAMSYS_REDIRECT_URI: "${VAMSYS_REDIRECT_URI:-https://efb.ijvirtual.org/index.php}"
+      # Private WeasyPrint renderer from /opt/ijv-efb-dispatch; unset token = Dompdf only
+      OFP_RENDER_URL: "${OFP_RENDER_URL:-http://ofp-renderer:8502/render}"
+      OFP_RENDER_TOKEN: "${OFP_RENDER_TOKEN:-}"
+      # Hoppie ACARS logon for the ops station; unset = ACARS features hidden
+      HOPPIE_LOGON: "${HOPPIE_LOGON:-}"
+      HOPPIE_STATION: "${HOPPIE_STATION:-IJVOPS}"
+    volumes:
+      - sessions:/var/lib/php/sessions
+      - acars:/var/lib/ijv-acars
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(str_contains(file_get_contents('http://127.0.0.1/', false, stream_context_create(['http' => ['header' => 'X-EFB-Healthcheck: 1']])), 'Log in with vAMSYS') ? 0 : 1);"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Single IJVOPS poller: replies to WX requests and logs OOOI/progress for the EFB
+  hoppie-poller:
+    build: .
+    restart: unless-stopped
+    user: www-data
+    command: ["php", "/usr/local/lib/ijv/hoppie_poll.php"]
+    environment:
+      HOPPIE_LOGON: "${HOPPIE_LOGON:-}"
+      HOPPIE_STATION: "${HOPPIE_STATION:-IJVOPS}"
+    volumes:
+      - acars:/var/lib/ijv-acars
+
+volumes:
+  sessions:
+  acars:

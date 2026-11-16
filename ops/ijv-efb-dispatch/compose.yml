@@ -1,0 +1,38 @@
+services:
+  web:
+    build:
+      context: ./repo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  # Private PDF renderer for the EFB backend; no host port, joined to the EFB network only
+  renderer:
+    build:
+      context: ./repo
+    restart: unless-stopped
+    command: ["python", "render_api.py"]
+    environment:
+      RENDER_TOKEN: "${RENDER_TOKEN:?set RENDER_TOKEN in .env}"
+    expose:
+      - "8502"
+    networks:
+      efb:
+        aliases: [ofp-renderer]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8502/health', timeout=3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+networks:
+  efb:
+    name: ijv-efb_default
+    external: true
