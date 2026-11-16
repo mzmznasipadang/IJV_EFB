@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Navlog } from "./navlog"
 import { PageBanner } from "./page-banner"
-import { dispatchPdfUrl, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
+import { dispatchId, dispatchPdfUrl, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
 
 function utc(value, includeDate = false) {
   if (!value) return "—"
@@ -65,7 +65,7 @@ const sigwxInterval = 10 * 60 * 1000
 const validCallsign = callsign => /^[A-Z0-9]{3,8}$/.test(callsign)
 
 function AcarsPanel({ flight, airports }) {
-  const flightKey = field(flight.params, "request_id") || field(flight.params, "time_generated")
+  const flightKey = dispatchId(flight)
   const storageKey = `ijv-efb-sigwx:${flightKey}`
   const [typedCallsign, setTypedCallsign] = useState(() => (field(flight.atc, "callsign") || flightNumber(flight) || "").toUpperCase())
   const [callsign, setCallsign] = useState(typedCallsign) // the callsign telexes go to, settled 1.5 s after typing stops
@@ -179,7 +179,7 @@ function AcarsPanel({ flight, airports }) {
   </section>
 }
 
-export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars, openAipAvailable }) {
+export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars, openAipAvailable, navlogEntries, updateNavlogEntry }) {
   const [username, setUsername] = useState(simbriefId || "")
   const [dispatchUsername, setDispatchUsername] = useState("")
   const [importOpen, setImportOpen] = useState(false)
@@ -337,10 +337,10 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
               </li>)}
             </ul>
           </section>
-          {acars && <AcarsPanel key={field(flight.params, "request_id") || field(flight.params, "time_generated")} flight={flight} airports={airports} />}
+          {acars && <AcarsPanel key={dispatchId(flight)} flight={flight} airports={airports} />}
         </div>
       </TabsContent>
-      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog flight={flight} airports={airports} openAipAvailable={openAipAvailable} /></TabsContent>
+      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog key={dispatchId(flight)} flight={flight} airports={airports} openAipAvailable={openAipAvailable} entries={navlogEntries} updateEntry={updateNavlogEntry} /></TabsContent>
       <TabsContent className="mt-3 space-y-4" value="ofp">
         <ExternalButton href="https://dispatch.simbrief.com/options/edit">Edit in SimBrief</ExternalButton>
         {field(flight.text, "plan_html") ? <iframe className="viewer bg-white" sandbox="" title="SimBrief operational flight plan" srcDoc={field(flight.text, "plan_html")} /> :

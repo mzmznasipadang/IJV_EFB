@@ -54,7 +54,7 @@ export function Home({ flight, navigate, openFlightView, openProfile }) {
       { label: "Navlog", Icon: Map, open: () => openFlightView("navlog"), disabledReason: requiresFlight },
       { label: "Wind Matrix", Icon: Wind, open: () => navigate("winds"), disabledReason: requiresFlight },
       { label: "Diversion", Icon: LifeBuoy },
-      { label: "Fuel Monitoring", Icon: Fuel },
+      { label: "Fuel Monitoring", Icon: Fuel, open: () => navigate("fuel"), disabledReason: requiresFlight },
       { label: "NOTAMs", Icon: TriangleAlert, open: () => navigate("notams"), disabledReason: requiresFlight },
       { label: "Weather", Icon: CloudSun, open: () => navigate("weather") },
     ]} />

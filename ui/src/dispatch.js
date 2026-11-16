@@ -269,3 +269,75 @@ export function oooiTimes(log) {
   }
   return times
 }
+
+// Crew Navlog entries (ETO, ATO, actual fuel, note), keyed `${route}:${legIndex}` where route is "p" or "a0", "a1"…
+export function dispatchId(flight) {
+  return String(field(flight?.params, "request_id") || field(flight?.params, "time_generated") || "")
+}
+
+export function dispatchFuelUnit(flight) {
+  const raw = String(field(flight?.params, "units") ?? "").toLowerCase()
+  return /^kgs?$/.test(raw) ? "kg" : /^lbs?$/.test(raw) ? "lb" : null
+}
+
+// One record per pilot: importing another dispatch replaces the previous dispatch's entries
+export function loadNavlogEntries(storage, key, id) {
+  try {
+    const saved = JSON.parse(storage.getItem(key))
+    if (id && saved?.dispatchId === id && saved.entries && typeof saved.entries === "object") return saved.entries
+  } catch { /* corrupt entry: start empty */ }
+  return {}
+}
+
+export function saveNavlogEntries(storage, key, id, entries) {
+  try {
+    storage.setItem(key, JSON.stringify({ dispatchId: id, entries }))
+  } catch { /* storage full or blocked: entries last for this session */ }
+}
+
+export const validUtcTime = value => value === "" || /^([01]\d|2[0-3])[0-5]\d$/.test(value)
+
+// Returns the fuel as a number, "" to clear, or null when invalid
+export function parseFuel(value, flight) {
+  const text = String(value).trim()
+  if (text === "") return ""
+  if (!/^\d+(\.\d+)?$/.test(text)) return null
+  const fuel = Number(text)
+  const ramp = Number(field(flight?.fuel, "plan_ramp"))
+  return ramp > 0 && fuel > ramp * 1.5 ? null : fuel
+}
+
+// shortcut: assumes SimBrief fix time_total counts from takeoff (est_off); confirm against an OFP if ETOs look off by the taxi time
+export function takeoffTime(flight) {
+  const off = Number(field(flight?.times, "est_off"))
+  if (off > 0) return off
+  const out = Number(field(flight?.times, "est_out"))
+  return out > 0 ? out + (Number(field(flight?.times, "taxi_out")) || 0) : null
+}
+
+export const plannedEto = (takeoff, elapsed) => takeoff != null && elapsed != null ? hhmm(takeoff + elapsed) : ""
+
+// Planned vs actual fuel on the primary route; the latest check is the furthest waypoint with actual fuel
+export function fuelStatus(legs, entries) {
+  const rows = legs.map((leg, index) => {
+    const actual = entries[`p:${index}`]?.fuel
+    const hasActual = typeof actual === "number"
+    return { index, leg, entry: entries[`p:${index}`] ?? {}, planned: leg.fuel, actual: hasActual ? actual : null,
+      deviation: hasActual && leg.fuel != null ? actual - leg.fuel : null }
+  })
+  const latest = rows.findLast(row => row.deviation != null) ?? null
+  const destinationPlanned = legs.at(-1)?.fuel ?? null
+  return { rows, latest, destinationPlanned,
+    destinationEstimate: latest && destinationPlanned != null ? destinationPlanned + latest.deviation : null }
+}
+
+// Index of the latest primary waypoint whose planned time has passed with no fuel check since the last one, or -1
+export function fuelCheckDue(legs, entries, takeoff, nowSec = Date.now() / 1000) {
+  if (takeoff == null) return -1
+  let due = -1
+  legs.forEach((leg, index) => {
+    if (typeof entries[`p:${index}`]?.fuel === "number") due = -1
+    else if (leg.elapsed != null && takeoff + leg.elapsed <= nowSec) due = index
+  })
+  return due
+}

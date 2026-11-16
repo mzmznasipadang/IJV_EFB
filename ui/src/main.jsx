@@ -4,11 +4,11 @@ import { createRoot } from "react-dom/client"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Charts, Checklists } from "./documents"
-import { field, flightAircraft, flightAirports, flightNumber, loadDispatch, saveDispatch } from "./dispatch"
+import { dispatchId, field, flightAircraft, flightAirports, flightNumber, loadDispatch, loadNavlogEntries, saveDispatch, saveNavlogEntries } from "./dispatch"
 import { FlightFolder } from "./flight"
 import { Home } from "./home"
 import { generateManifest } from "./manifest"
-import { FlightMap } from "./navlog"
+import { FlightMap, FuelMonitoring } from "./navlog"
 import { Manifest, Notams, Notes, Performance, WindMatrix } from "./tools"
 import { Weather } from "./weather"
 import "@fontsource-variable/inter/wght.css"
@@ -16,6 +16,7 @@ import "./index.css"
 
 const config = JSON.parse(document.getElementById("efb-config").textContent)
 const dispatchKey = `ijv-efb-dispatch:${config.pilotCallsign}`
+const navlogKey = `ijv-efb-navlog:${config.pilotCallsign}`
 const appearanceOptions = [
   ["light", "Light", Sun],
   ["dark", "Dark", Moon],
@@ -124,7 +125,7 @@ function Toolbar({ active, flight, goBack, accountOpen, setAccountOpen }) {
             </DropdownMenuRadioItem>)}
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem asChild><a href="?logout=1" onClick={() => localStorage.removeItem(dispatchKey)}><LogOut />Sign out</a></DropdownMenuItem>
+          <DropdownMenuItem asChild><a href="?logout=1" onClick={() => { localStorage.removeItem(dispatchKey); localStorage.removeItem(navlogKey) }}><LogOut />Sign out</a></DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -141,6 +142,7 @@ function App() {
   const [chartAirport, setChartAirport] = useState("")
   const [chartMode, setChartMode] = useState("ijv")
   const [manifest, setManifest] = useState([])
+  const [navlogEntries, setNavlogEntries] = useState({})
   const airports = useMemo(() => flightAirports(flight), [flight])
 
   function navigate(id) {
@@ -159,6 +161,21 @@ function App() {
     navigate("flight")
   }
 
+  function openNavlogEntry(id) {
+    openFlightView("navlog")
+    setTimeout(() => {
+      const row = document.getElementById(id)
+      row?.scrollIntoView({ block: "center" })
+      row?.querySelector("input[aria-label^=\"Actual fuel\"]")?.focus({ preventScroll: true })
+    })
+  }
+
+  function updateNavlogEntry(key, patch) {
+    const next = { ...navlogEntries, [key]: { ...navlogEntries[key], ...patch } }
+    setNavlogEntries(next)
+    saveNavlogEntries(localStorage, navlogKey, dispatchId(flight), next)
+  }
+
   useEffect(() => {
     const saved = loadDispatch(localStorage, dispatchKey)
     if (saved) activateFlight(saved.flight, saved.manifest)
@@ -168,6 +185,7 @@ function App() {
     const plannedAirports = flightAirports(dispatch)
     const departure = plannedAirports[0]?.code || ""
     setFlight(dispatch)
+    setNavlogEntries(loadNavlogEntries(localStorage, navlogKey, dispatchId(dispatch)))
     setWeatherAirport(departure)
     setChartAirport(departure)
     setChartMode("ijv")
@@ -195,7 +213,8 @@ function App() {
       <div hidden={active !== "home"}><Home flight={flight} navigate={navigate} openFlightView={openFlightView}
         openProfile={() => { window.scrollTo(0, 0); setAccountOpen(true) }} /></div>
       <div hidden={active !== "flight"}><FlightFolder flight={flight} setFlight={activateFlight} airports={airports} simbriefId={config.simbriefId} acars={config.acars}
-        openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} openAipAvailable={config.openAipAvailable} /></div>
+        openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} openAipAvailable={config.openAipAvailable}
+        navlogEntries={navlogEntries} updateNavlogEntry={updateNavlogEntry} /></div>
       <div hidden={active !== "weather"}><Weather airport={weatherAirport} setAirport={setWeatherAirport} flightAirports={airports} /></div>
       <div hidden={active !== "charts"}><Charts catalog={config.charts} airport={chartAirport} setAirport={setChartAirport}
         airports={airports} mode={chartMode} setMode={setChartMode} /></div>
@@ -205,6 +224,7 @@ function App() {
       <div hidden={active !== "notes"}><Notes /></div>
       <div hidden={active !== "notams"}><Notams flight={flight} /></div>
       <div hidden={active !== "winds"}><WindMatrix flight={flight} /></div>
+      <div hidden={active !== "fuel"}>{flight && <FuelMonitoring flight={flight} entries={navlogEntries} openEntry={openNavlogEntry} />}</div>
       <div hidden={active !== "manifest"}><Manifest flight={flight} rows={manifest} /></div>
     </main>
     {active !== "home" && <Dock active={active} navigate={navigate} />}

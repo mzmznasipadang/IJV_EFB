@@ -140,3 +140,45 @@ test("telex builders produce uppercase summaries", async () => {
   assert.match(ofpTelex(flight), /^IJV OPS OFP IJV807 WIII-WIKK ETD ---- .*CRZ FL350 BLOCK FUEL 5200 ZFW 52000 .* KGS .*RTE DCT$/)
   assert.equal(notamTelex(flight), "IJV OPS NOTAM DIGEST WIII: RWY 07L CLSD WIKK: NIL URGENT")
 })
+
+test("navlog entries belong to one dispatch and survive reloads", async () => {
+  const { dispatchId, loadNavlogEntries, saveNavlogEntries } = await import("./dispatch.js")
+  const store = new Map()
+  const storage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) }
+  const a = dispatchId({ params: { request_id: "111", time_generated: "9" } })
+  assert.equal(a, "111")
+  assert.equal(dispatchId({ params: { time_generated: "9" } }), "9")
+  saveNavlogEntries(storage, "k", a, { "p:0": { fuel: 5000 }, "a0:0": { note: "alt" } })
+  assert.deepEqual(loadNavlogEntries(storage, "k", a), { "p:0": { fuel: 5000 }, "a0:0": { note: "alt" } })
+  assert.deepEqual(loadNavlogEntries(storage, "k", "222"), {})
+  assert.deepEqual(loadNavlogEntries(storage, "k", ""), {})
+  store.set("k", "{bad")
+  assert.deepEqual(loadNavlogEntries(storage, "k", a), {})
+})
+
+test("navlog entry validation", async () => {
+  const { validUtcTime, parseFuel, dispatchFuelUnit } = await import("./dispatch.js")
+  assert.deepEqual(["2359", "0000", "", "2400", "0960", "123", "12:30"].map(validUtcTime), [true, true, true, false, false, false, false])
+  const flight = { fuel: { plan_ramp: "10000" } }
+  assert.deepEqual(["4500", " 4500.5 ", "", "-1", "abc", "15000", "15001"].map(v => parseFuel(v, flight)), [4500, 4500.5, "", null, null, 15000, null])
+  assert.equal(parseFuel("99999", {}), 99999)
+  assert.deepEqual(["kgs", "LBS", "kg", ""].map(units => dispatchFuelUnit({ params: { units } })), ["kg", "lb", "kg", null])
+})
+
+test("fuel status, destination estimate and fuel-check reminder", async () => {
+  const { fuelStatus, fuelCheckDue, plannedEto, takeoffTime } = await import("./dispatch.js")
+  const legs = [{ fuel: 9000, elapsed: 0 }, { fuel: 8000, elapsed: 600 }, { fuel: 6000, elapsed: 1800 }, { fuel: 3000, elapsed: 3600 }]
+  assert.equal(fuelStatus(legs, {}).destinationEstimate, null)
+  const status = fuelStatus(legs, { "p:1": { fuel: 7900 }, "p:2": { fuel: 5800 }, "a0:2": { fuel: 1 } })
+  assert.deepEqual(status.rows.map(row => row.deviation), [null, -100, -200, null])
+  assert.equal(status.latest.index, 2)
+  assert.equal(status.destinationEstimate, 2800)
+  assert.equal(fuelCheckDue(legs, {}, 1000, 1000 + 700), 1)
+  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, 1000, 1000 + 700), -1)
+  assert.equal(fuelCheckDue(legs, { "p:1": { fuel: 7900 } }, 1000, 1000 + 2000), 2)
+  assert.equal(fuelCheckDue(legs, {}, null), -1)
+  assert.equal(takeoffTime({ times: { est_out: "3600", taxi_out: "600" } }), 4200)
+  assert.equal(takeoffTime({ times: { est_off: "4000", est_out: "3600" } }), 4000)
+  assert.equal(plannedEto(4200, 600), "0120")
+  assert.equal(plannedEto(null, 600), "")
+})
