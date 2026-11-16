@@ -153,8 +153,8 @@ function App() {
     window.scrollTo(0, 0)
   }
 
-  function openOFP() {
-    setFlightView("ofp")
+  function openFlightView(view) {
+    setFlightView(view)
     navigate("flight")
   }
 
@@ -191,7 +191,7 @@ function App() {
   return <>
     <Toolbar active={active} flight={flight} goBack={goBack} accountOpen={accountOpen} setAccountOpen={setAccountOpen} />
     <main className={active === "home" ? "workspace home-workspace" : "workspace"}>
-      <div hidden={active !== "home"}><Home flight={flight} navigate={navigate} openOFP={openOFP}
+      <div hidden={active !== "home"}><Home flight={flight} navigate={navigate} openFlightView={openFlightView}
         openProfile={() => { window.scrollTo(0, 0); setAccountOpen(true) }} /></div>
       <div hidden={active !== "flight"}><FlightFolder flight={flight} setFlight={activateFlight} airports={airports} simbriefId={config.simbriefId} acars={config.acars}
         openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} /></div>

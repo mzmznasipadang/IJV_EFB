@@ -22,7 +22,7 @@ function LauncherGroup({ title, items }) {
   </section>
 }
 
-export function Home({ flight, navigate, openOFP, openProfile }) {
+export function Home({ flight, navigate, openFlightView, openProfile }) {
   const origin = field(flight?.origin, "icao_code")
   const destination = field(flight?.destination, "icao_code")
   const aircraft = flightAircraft(flight)
@@ -50,8 +50,8 @@ export function Home({ flight, navigate, openOFP, openProfile }) {
       </Button>
     </section>
     <LauncherGroup title="Flight Briefing" items={[
-      { label: "OFP", Icon: FileText, open: openOFP, disabledReason: requiresFlight },
-      { label: "Navlog", Icon: Map },
+      { label: "OFP", Icon: FileText, open: () => openFlightView("ofp"), disabledReason: requiresFlight },
+      { label: "Navlog", Icon: Map, open: () => openFlightView("navlog"), disabledReason: requiresFlight },
       { label: "Wind Matrix", Icon: Wind, open: () => navigate("winds"), disabledReason: requiresFlight },
       { label: "Diversion", Icon: LifeBuoy },
       { label: "Fuel Monitoring", Icon: Fuel },

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Navlog } from "./navlog"
 import { PageBanner } from "./page-banner"
 import { dispatchPdfUrl, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
 
@@ -278,6 +279,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TabsList className="module-tabs h-auto! max-w-full flex-wrap">
           <TabsTrigger className="px-4" value="briefing"><FolderOpen />Briefing</TabsTrigger>
+          <TabsTrigger className="px-4" value="navlog"><Map />Navlog</TabsTrigger>
           <TabsTrigger className="px-4" value="ofp"><FileText />Full OFP</TabsTrigger>
           {customPdfAvailable && <TabsTrigger className="px-4" value="pdf"><FileType />IJV PDF</TabsTrigger>}
         </TabsList>
@@ -338,6 +340,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
           {acars && <AcarsPanel key={field(flight.params, "request_id") || field(flight.params, "time_generated")} flight={flight} airports={airports} />}
         </div>
       </TabsContent>
+      <TabsContent className="mt-3 min-w-0 space-y-4" value="navlog"><Navlog flight={flight} airports={airports} /></TabsContent>
       <TabsContent className="mt-3 space-y-4" value="ofp">
         <ExternalButton href="https://dispatch.simbrief.com/options/edit">Edit in SimBrief</ExternalButton>
         {field(flight.text, "plan_html") ? <iframe className="viewer bg-white" sandbox="" title="SimBrief operational flight plan" srcDoc={field(flight.text, "plan_html")} /> :

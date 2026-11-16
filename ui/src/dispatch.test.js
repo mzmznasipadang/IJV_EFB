@@ -22,6 +22,32 @@ test("flightNotams groups by airport role", () => {
   assert.deepEqual(groups.map(g => [g.code, g.role, g.notams.length]), [["WIII", "Departure", 1], ["WIKK", "Destination", 1], ["WIPP", "Alternate", 0]])
 })
 
+test("navlog legs keep fix order and distinguish zero from missing data", async () => {
+  const { navlogLegs } = await import("./dispatch.js")
+  const log = { fix: [
+    { ident: "WIII", time_total: "0" },
+    { ident: { value: "TOC" }, via_airway: "DCT", altitude_feet: "31000", track_mag: "005",
+      distance: "20.5", time_total: "600", fuel_plan_onboard: "5000" },
+    { ident: "TOD", distance: "10" },
+    { ident: "WIPP", distance: "", fuel_plan_onboard: "0" },
+    { ident: "NEXT", distance: "2" },
+  ] }
+  const legs = navlogLegs(log, "WIII")
+  assert.deepEqual(legs.map(leg => leg.ident), ["WIII", "TOC", "TOD", "WIPP", "NEXT"])
+  assert.deepEqual(legs.map(leg => leg.totalDistance), [0, 20.5, 30.5, null, null])
+  assert.deepEqual(legs[1], {
+    ident: "TOC", airway: "DCT", altitude: 31000, track: 5,
+    distance: 20.5, totalDistance: 20.5, elapsed: 600, fuel: 5000,
+  })
+  assert.equal(legs[0].elapsed, 0)
+  assert.equal(legs[0].track, null)
+  assert.equal(legs[3].fuel, 0)
+  assert.equal(navlogLegs({ fix: { ident: "WIPP", distance: "15" } })[0].totalDistance, 15)
+  assert.equal(navlogLegs({ fix: { ident: "WIPP" } }, "WIII")[0].totalDistance, null)
+  assert.deepEqual(navlogLegs({ fix: [null, {}, { ident: "" }] }), [])
+  assert.deepEqual(navlogLegs(null), [])
+})
+
 test("windMatrix groups by stage, skips TOC/TOD, picks levels and nearest column", async () => {
   const { windMatrix } = await import("./dispatch.js")
   const level = (altitude, wind_dir, wind_spd, oat) => ({ altitude: String(altitude), wind_dir, wind_spd, oat })

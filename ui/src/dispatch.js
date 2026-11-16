@@ -80,6 +80,35 @@ export function flightNotams(flight) {
     .map(({ airport, role }) => ({ code: field(airport, "icao_code"), role, notams: rankNotams(airport.notam) }))
 }
 
+function navlogNumber(fix, key) {
+  const value = field(fix, key)
+  if (typeof value !== "number" && (typeof value !== "string" || !value.trim())) return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+export function navlogLegs(log, departure) {
+  const fixes = [log?.fix ?? []].flat().filter(fix => field(fix, "ident"))
+  let totalDistance = 0
+  return fixes.map((fix, index) => {
+    const ident = field(fix, "ident")
+    const distance = navlogNumber(fix, "distance")
+    // SimBrief can omit the inbound leg distance at the departure airport.
+    const legDistance = distance ?? (index === 0 && ident === departure ? 0 : null)
+    totalDistance = totalDistance == null || legDistance == null ? null : totalDistance + legDistance
+    return {
+      ident,
+      airway: field(fix, "via_airway"),
+      altitude: navlogNumber(fix, "altitude_feet"),
+      track: navlogNumber(fix, "track_mag"),
+      distance,
+      totalDistance,
+      elapsed: navlogNumber(fix, "time_total"),
+      fuel: navlogNumber(fix, "fuel_plan_onboard"),
+    }
+  })
+}
+
 // Ported from IJV dispatch formatWindMatrixRow: same 7 levels and stage rules as the PDF wind page
 export const windLevels = [10000, 18000, 24000, 30000, 34000, 39000, 45000]
 
