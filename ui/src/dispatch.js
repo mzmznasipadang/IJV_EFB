@@ -50,7 +50,30 @@ export async function importDispatch(username, signal) {
   if (!field(data.origin, "icao_code") || !field(data.destination, "icao_code")) {
     throw new Error("This dispatch has no route. Generate a flight plan in SimBrief and retry.")
   }
-  return data
+  return normalizeDispatchTimes(data)
+}
+
+// SimBrief v2 can return ISO timestamps and HH:MM:SS durations. The EFB uses seconds for both.
+function normalizeDispatchTimes(flight) {
+  const timestamp = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/
+  const duration = /^(\d+):([0-5]\d):([0-5]\d)$/
+  const generated = field(flight.params, "time_generated")
+  if (timestamp.test(generated)) {
+    const parsed = Date.parse(generated)
+    if (Number.isFinite(parsed)) flight.params.time_generated = parsed / 1000
+  }
+  for (const key of Object.keys(flight.times ?? {})) {
+    const value = field(flight.times, key)
+    if (typeof value !== "string") continue
+    if (timestamp.test(value)) {
+      const parsed = Date.parse(value)
+      if (Number.isFinite(parsed)) flight.times[key] = parsed / 1000
+    } else {
+      const match = duration.exec(value)
+      if (match) flight.times[key] = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+    }
+  }
+  return flight
 }
 
 function plannedTime(times, key) {
@@ -211,6 +234,7 @@ export function saveDispatch(storage, key, flight, manifest) {
 export function loadDispatch(storage, key, now = Date.now()) {
   try {
     const saved = JSON.parse(storage.getItem(key))
+    if (saved?.flight) normalizeDispatchTimes(saved.flight)
     const generated = Number(field(saved?.flight?.params, "time_generated")) * 1000 || saved?.savedAt
     if (saved?.flight && generated && now - generated < dispatchMaxAge) return saved
     storage.removeItem(key)

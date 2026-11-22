@@ -8,7 +8,7 @@ Live at [efb.ijvirtual.org](https://efb.ijvirtual.org).
 
 ## Features
 
-- **Flight Folder:** imports the latest SimBrief dispatch and shows UTC ETD/ETA, airborne ETE, fuel, weights, the route and NOTAMs. It previews a CDU-style loadsheet and exports the IJV-styled OFP as a PDF.
+- **Flight Folder:** imports the latest SimBrief dispatch and shows UTC ETD/ETA, airborne ETE, fuel, weights, the route and NOTAMs. It accepts both numeric seconds and SimBrief v2's ISO timestamps and clock durations. It previews a CDU-style loadsheet and exports the IJV-styled OFP as a PDF.
 - **Weather:** METAR and TAF for the departure, destination and alternates, decoded, from aviationweather.gov.
 - **Charts and checklists:** PDF libraries served from `charts/` and `checklists/`.
 - **Performance tools:** quick calculators for the flight deck.

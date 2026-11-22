@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { dispatchTiming, enrouteDuration } from "./dispatch.js"
+import { dispatchTiming, enrouteDuration, importDispatch, loadDispatch } from "./dispatch.js"
 import { loadsheetText } from "./loadsheet.js"
 
 const epoch = iso => Date.parse(iso) / 1000
@@ -37,4 +37,24 @@ test("crew loadsheet only uses complete actuals and does not relabel estimated l
   assert.match(text, /^CREW ACTUAL WEIGHTS$/m)
   assert.match(text, /^ZFW +55000$/m)
   assert.match(text, /^TOW +61500\nEST LDW +58200\nRAMP FUEL +5500$/m)
+})
+
+test("live SimBrief v2 timestamps and durations survive import and cached loadsheet rendering", async t => {
+  const raw = {
+    ...flight,
+    params: { ...flight.params, time_generated: "2026-10-26T20:00:00Z" },
+    times: { est_out: "2026-10-26T23:55:00Z", est_in: "2026-10-27T01:25:11Z", est_time_enroute: "01:10:11", orig_timezone: "+07:00:00" },
+  }
+  t.mock.method(globalThis, "fetch", async () => Response.json(raw))
+  const imported = await importDispatch("12345")
+  const packed = JSON.stringify({ flight: raw, savedAt: Date.now() })
+  const storage = { getItem: () => packed, removeItem: () => {} }
+  const cached = loadDispatch(storage, "dispatch", out * 1000).flight
+  for (const plan of [imported, cached]) {
+    const telex = loadsheetText(plan)
+    assert.match(telex, /^LOADSHEET 26OCT26\n2000Z/)
+    assert.match(telex, /ETD 2355Z  ETA 0125Z\nETE 01:10$/)
+    assert.equal(plan.times.orig_timezone, "+07:00:00")
+  }
+  assert.equal(loadDispatch(storage, "dispatch", epoch("2026-10-29T20:00Z") * 1000), null)
 })
