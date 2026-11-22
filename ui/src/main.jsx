@@ -8,7 +8,7 @@ import { sendTelex, validCallsign } from "./acars"
 import { dispatchId, field, flightAircraft, flightAirports, flightNumber, importDispatch, loadDispatch, loadNavlogEntries, saveDispatch, saveNavlogEntries } from "./dispatch"
 import { FlightFolder, ofpViews } from "./flight"
 import { Home } from "./home"
-import { loadsheetText } from "./loadsheet"
+import { loadsheetTelex } from "./loadsheet"
 import { generateManifest } from "./manifest"
 import { Diversion } from "./diversion.jsx"
 import { FlightMap, FuelMonitoring, Navlog } from "./navlog"
@@ -248,7 +248,7 @@ function App() {
           signal.throwIfAborted()
           if (alreadySent()) return finish(`Planned loadsheet already sent to ${to}.`)
           setStartup({ text: `Sending planned loadsheet to ${to}…`, sending: true })
-          await sendTelex(to, loadsheetText(latest), { multiline: true, signal })
+          await sendTelex(to, loadsheetTelex(latest), { signal })
           try { localStorage.setItem(sentKey, "1") } catch {}
           finish(`Hoppie accepted the planned loadsheet for ${to}.`)
         }

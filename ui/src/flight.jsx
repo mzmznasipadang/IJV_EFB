@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { sendTelex, validCallsign } from "./acars"
-import { hasLoadsheetActuals, loadsheetText } from "./loadsheet"
+import { hasLoadsheetActuals, loadsheetText, loadsheetTelex } from "./loadsheet"
 import { OfpDocument, PilotEntries } from "./ofp"
 import { briefingText, cfpText, releaseText } from "./ofp-text"
 import { PageBanner } from "./page-banner"
@@ -74,7 +74,7 @@ function Loadsheet({ flight, release, send, ready, busy, autoPending }) {
         </Button>}
         {send && <div>
           <Button className="touch-control" variant="outline" disabled={!ready || autoPending}
-            onClick={() => send(label, () => text, true)}>
+            onClick={() => send(label, () => loadsheetTelex(flight, actual ? release : undefined))}>
             <Send />{busy === label ? "Sending…" : `Send ${label.toLowerCase()}`}
           </Button>
         </div>}
@@ -109,10 +109,10 @@ function AcarsPanel({ flight, airports, release, autoLoadsheetPending }) {
   const [status, setStatus] = useState("")
   const [busy, setBusy] = useState("")
 
-  async function send(label, build, multiline = false) {
+  async function send(label, build) {
     setBusy(label)
     try {
-      await sendTelex(callsign, await build(), { multiline })
+      await sendTelex(callsign, await build())
       setStatus(`Hoppie accepted ${label.toLowerCase()} for ${callsign} · ${new Date().toISOString().slice(11, 16)}Z`)
     } catch (error) {
       setStatus(error.name === "TimeoutError" ? "Request timed out." : error.message)

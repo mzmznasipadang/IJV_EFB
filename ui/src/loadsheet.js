@@ -2,8 +2,8 @@ import { dispatchFuelUnit, dispatchTiming, enrouteDuration, field, flightNumber 
 
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 const identifier = value => String(value ?? "").toUpperCase().replace(/[^A-Z0-9-]/g, "")
-const mass = value => value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0 ? String(Number(value)) : "N/A"
-const code = airport => identifier(field(airport, "iata_code")) || identifier(field(airport, "icao_code")) || "N/A"
+const mass = value => value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0 ? String(Number(value)) : null
+const code = airport => identifier(field(airport, "iata_code")) || identifier(field(airport, "icao_code"))
 
 function utcParts(value) {
   const date = new Date(Number(value) * 1000)
@@ -18,34 +18,69 @@ export function hasLoadsheetActuals(release) {
     release.zfw > 0 && release.tow > 0 && release.ramp >= 0)
 }
 
-export function loadsheetText(flight, release) {
+function loadsheetData(flight, release) {
   const actual = hasLoadsheetActuals(release)
   const { etd, eta, ete } = dispatchTiming(flight)
-  const departure = utcParts(etd)
+  const weight = key => mass(field(flight.weights, key))
+  return {
+    actual,
+    departure: utcParts(etd),
+    arrival: utcParts(eta),
+    enroute: enrouteDuration(ete),
+    units: { kg: "KGS", lb: "LBS" }[dispatchFuelUnit(flight)],
+    origin: code(flight.origin),
+    destination: code(flight.destination),
+    zfw: actual ? mass(release.zfw) : weight("est_zfw"),
+    tow: actual ? mass(release.tow) : weight("est_tow"),
+    ldw: weight("est_ldw"),
+    ramp: mass(actual ? release.ramp : field(flight.fuel, "plan_ramp")),
+    pax: weight("pax_count"),
+    cargo: weight("cargo"),
+    payload: weight("payload"),
+  }
+}
+
+export function loadsheetText(flight, release) {
+  const data = loadsheetData(flight, release)
   const issued = utcParts(field(flight.params, "time_generated"))
   const number = identifier(flightNumber(flight) || field(flight.atc, "callsign")) || "N/A"
   const revision = identifier(field(flight.general, "release"))
-  const units = { kg: "KGS", lb: "LBS" }[dispatchFuelUnit(flight)] || "UNITS N/A"
-  const weight = key => mass(field(flight.weights, key))
-  const row = (label, value) => `${label.padEnd(13)}${value}`
+  const row = (label, value) => `${label.padEnd(13)}${value ?? "N/A"}`
   return [
     `LOADSHEET ${issued?.date ?? "-------"}`,
-    `${issued?.time ?? "-----"}${revision ? `  E${revision}` : ""}  ${units}`,
-    `${number}/${departure?.day ?? "--"} ${code(flight.origin)} ${code(flight.destination)}`,
-    actual ? "CREW ACTUAL WEIGHTS" : "PLANNED WEIGHTS",
+    `${issued?.time ?? "-----"}${revision ? `  E${revision}` : ""}  ${data.units ?? "UNITS N/A"}`,
+    `${number}/${data.departure?.day ?? "--"} ${data.origin || "N/A"} ${data.destination || "N/A"}`,
+    data.actual ? "CREW ACTUAL WEIGHTS" : "PLANNED WEIGHTS",
     row("TOB", "N/A"),
-    row("ZFW", actual ? mass(release.zfw) : weight("est_zfw")),
+    row("ZFW", data.zfw),
     row("MACZFW", "N/A"),
     row("MACTOW", "N/A"),
     "------------------------",
-    row("PAX (PLN)", weight("pax_count")),
-    row("TOW", actual ? mass(release.tow) : weight("est_tow")),
-    row("EST LDW", weight("est_ldw")),
-    row("RAMP FUEL", mass(actual ? release.ramp : field(flight.fuel, "plan_ramp"))),
-    row("CARGO (PLN)", weight("cargo")),
-    row("PAYLOAD(PLN)", weight("payload")),
+    row("PAX (PLN)", data.pax),
+    row("TOW", data.tow),
+    row("EST LDW", data.ldw),
+    row("RAMP FUEL", data.ramp),
+    row("CARGO (PLN)", data.cargo),
+    row("PAYLOAD(PLN)", data.payload),
     "------------------------",
-    `ETD ${departure?.time ?? "-----"}  ETA ${utcParts(eta)?.time ?? "-----"}`,
-    `ETE ${enrouteDuration(ete) ?? "--:--"}`,
+    `ETD ${data.departure?.time ?? "-----"}  ETA ${data.arrival?.time ?? "-----"}`,
+    `ETE ${data.enroute ?? "--:--"}`,
   ].join("\n")
+}
+
+// Cockpit telex clients reflow whitespace. Keep each label and value in one word.
+export function loadsheetTelex(flight, release) {
+  const data = loadsheetData(flight, release)
+  const callsign = identifier(field(flight.atc, "callsign") || flightNumber(flight)) || "FLIGHT-NA"
+  const plan = data.actual ? "PLN-" : ""
+  const fields = [
+    ["ZFW", data.zfw], ["TOW", data.tow], [data.actual ? "ELDW" : "LDW", data.ldw], ["RAMP", data.ramp],
+    [`${plan}PAX`, data.pax], [`${plan}CARGO`, data.cargo], [`${plan}PAYLOAD`, data.payload],
+    ["ETD", data.departure?.time], ["ETA", data.arrival?.time], ["ETE", data.enroute],
+  ]
+  return [
+    data.actual ? "IJV CREW LOADSHEET" : "IJV PLANNED LOADSHEET",
+    callsign, `${data.origin || "NA"}-${data.destination || "NA"}`, data.units ?? "UNITS-NA",
+    ...fields.filter(([, value]) => value != null).map(([label, value]) => `${label}:${value}`),
+  ].join(" ")
 }
