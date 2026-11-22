@@ -8,13 +8,15 @@ Live at [efb.ijvirtual.org](https://efb.ijvirtual.org).
 
 ## Features
 
-- **Flight Folder:** imports the latest SimBrief dispatch. It shows the briefing, fuel, weights, the route and NOTAMs, and exports the IJV-styled OFP as a PDF.
+- **Flight Folder:** imports the latest SimBrief dispatch and shows UTC ETD/ETA, airborne ETE, fuel, weights, the route and NOTAMs. It previews a CDU-style loadsheet and exports the IJV-styled OFP as a PDF.
 - **Weather:** METAR and TAF for the departure, destination and alternates, decoded, from aviationweather.gov.
 - **Charts and checklists:** PDF libraries served from `charts/` and `checklists/`.
 - **Performance tools:** quick calculators for the flight deck.
 - **Hoppie ACARS** (opt-in on the login page):
   - **SIGWX watch:** checks the planned route and altitude against international SIGMETs and telexes new hits to the aircraft.
   - **One-tap uplinks:** weather, OFP summary, NOTAM digest and a "new dispatch issued" notice.
+  - **Loadsheet:** after a new vAMSYS login with a SimBrief ID, the EFB reloads the flight plan. With Hoppie enabled, the open EFB tab waits 30 seconds after import, then sends the planned loadsheet once per dispatch and callsign in that browser. A page refresh does not trigger another automatic import or send.
+  - **Manual loadsheet:** preview and send planned weights, or enter ZFW, TOW and ramp fuel in Dispatch Release to preview and send crew weights. TOB and %MAC are marked unavailable rather than inferred.
   - **OOOI times:** OUT, OFF, ON and IN times are read from the crew's downlinks.
   - **Request poller:** the `hoppie-poller` container answers `WX`, `METAR` and `TAF` telexes sent to the ops station with a METAR and TAF.
 
@@ -63,7 +65,7 @@ The script reads the local Gitea repository, builds the revision, and waits for 
 cd ui
 npm install
 npm run dev
-node --test src/dispatch.test.js
+node --test src/dispatch.test.js src/loadsheet.test.js
 ```
 
 ## License

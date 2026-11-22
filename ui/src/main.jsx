@@ -4,9 +4,11 @@ import { createRoot } from "react-dom/client"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Charts, Checklists } from "./documents"
-import { dispatchId, field, flightAircraft, flightAirports, flightNumber, loadDispatch, loadNavlogEntries, saveDispatch, saveNavlogEntries } from "./dispatch"
+import { sendTelex, validCallsign } from "./acars"
+import { dispatchId, field, flightAircraft, flightAirports, flightNumber, importDispatch, loadDispatch, loadNavlogEntries, saveDispatch, saveNavlogEntries } from "./dispatch"
 import { FlightFolder, ofpViews } from "./flight"
 import { Home } from "./home"
+import { loadsheetText } from "./loadsheet"
 import { generateManifest } from "./manifest"
 import { Diversion } from "./diversion.jsx"
 import { FlightMap, FuelMonitoring, Navlog } from "./navlog"
@@ -154,6 +156,8 @@ function App() {
   const [chartMode, setChartMode] = useState("ijv")
   const [manifest, setManifest] = useState([])
   const [navlogEntries, setNavlogEntries] = useState({})
+  const [startup, setStartup] = useState(null)
+  const startupAbort = useRef(null)
   const airports = useMemo(() => flightAirports(flight), [flight])
 
   function navigate(id) {
@@ -190,7 +194,84 @@ function App() {
   useEffect(() => {
     const saved = loadDispatch(localStorage, dispatchKey)
     if (saved) activateFlight(saved.flight, saved.manifest)
+    if (!config.freshLogin || !config.simbriefId) return
+
+    const controller = new AbortController()
+    const { signal } = controller
+    let timer
+    function abort() {
+      clearTimeout(timer)
+      controller.abort()
+      if (startupAbort.current === abort) startupAbort.current = null
+    }
+    startupAbort.current = abort
+    window.addEventListener("pagehide", abort)
+
+    function finish(text, error = false) {
+      if (!signal.aborted) setStartup({ text, error })
+      if (startupAbort.current === abort) startupAbort.current = null
+    }
+
+    async function reload() {
+      setStartup({ text: "Reloading the latest SimBrief flight plan…" })
+      let latest
+      try {
+        latest = await importDispatch(config.simbriefId, AbortSignal.any([signal, AbortSignal.timeout(25000)]))
+        signal.throwIfAborted()
+      } catch (error) {
+        finish(`SimBrief reload failed: ${error.name === "TimeoutError" ? "request timed out" : error.message} Use Import dispatch to try again.`, true)
+        return
+      }
+      activateFlight(latest, dispatchId(latest) === dispatchId(saved?.flight) ? saved?.manifest : undefined)
+      if (!config.acars) {
+        finish("SimBrief flight plan reloaded.")
+        return
+      }
+      const to = (field(latest.atc, "callsign") || flightNumber(latest)).toUpperCase()
+      const id = dispatchId(latest)
+      if (!id || !validCallsign(to)) {
+        finish("Flight plan reloaded. Automatic loadsheet skipped: no dispatch ID or valid aircraft callsign.", true)
+        return
+      }
+      const sentKey = `ijv-efb-loadsheet:${JSON.stringify([config.pilotCallsign, id, to])}`
+      function alreadySent() {
+        try { return localStorage.getItem(sentKey) === "1" } catch { return false }
+      }
+      if (alreadySent()) {
+        finish(`Flight plan reloaded. Planned loadsheet already sent to ${to}.`)
+        return
+      }
+
+      setStartup({ text: `Flight plan reloaded. Planned loadsheet will be sent to ${to} in 30 seconds.`, sending: true })
+      timer = setTimeout(async () => {
+        async function send() {
+          signal.throwIfAborted()
+          if (alreadySent()) return finish(`Planned loadsheet already sent to ${to}.`)
+          setStartup({ text: `Sending planned loadsheet to ${to}…`, sending: true })
+          await sendTelex(to, loadsheetText(latest), { multiline: true, signal })
+          try { localStorage.setItem(sentKey, "1") } catch {}
+          finish(`Hoppie accepted the planned loadsheet for ${to}.`)
+        }
+        try {
+          if (navigator.locks) await navigator.locks.request(sentKey, { signal }, send)
+          else await send()
+        } catch (error) {
+          finish(`Loadsheet send failed: ${error.name === "TimeoutError" ? "request timed out" : error.message} Check ACARS before sending manually.`, true)
+        }
+      }, 30000)
+    }
+    reload()
+    return () => {
+      window.removeEventListener("pagehide", abort)
+      abort()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function cancelStartup() {
+    if (!startupAbort.current) return
+    startupAbort.current()
+    setStartup(null)
+  }
 
   function activateFlight(dispatch, savedManifest) {
     const plannedAirports = flightAirports(dispatch)
@@ -221,9 +302,11 @@ function App() {
   return <>
     <Toolbar active={active} flight={flight} goBack={goBack} accountOpen={accountOpen} setAccountOpen={setAccountOpen} />
     <main className={active === "home" ? "workspace home-workspace" : "workspace"}>
+      {startup && <p className={`panel mb-3 px-4 py-3 text-sm ${startup.error ? "text-destructive" : "secondary-copy"}`} role="status">{startup.text}</p>}
       <div hidden={active !== "home"}><Home flight={flight} entries={navlogEntries} navigate={navigate} openFlightView={openFlightView}
         openProfile={() => { window.scrollTo(0, 0); setAccountOpen(true) }} /></div>
       <div hidden={active !== "flight"}><FlightFolder flight={flight} setFlight={activateFlight} airports={airports} simbriefId={config.simbriefId} acars={config.acars}
+        onManualImport={cancelStartup} autoLoadsheetPending={Boolean(startup?.sending)}
         openWeather={openAirportWeather} openCharts={openAirportCharts} view={flightView} setView={setFlightView} openAipAvailable={config.openAipAvailable}
         navlogEntries={navlogEntries} updateNavlogEntry={updateNavlogEntry} /></div>
       <div hidden={active !== "navlog"}>{flight && <Navlog key={dispatchId(flight)} flight={flight} airports={airports} entries={navlogEntries} updateEntry={updateNavlogEntry} />}</div>

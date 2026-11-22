@@ -53,6 +53,26 @@ export async function importDispatch(username, signal) {
   return data
 }
 
+function plannedTime(times, key) {
+  const seconds = Number(field(times, key))
+  return Number.isFinite(seconds) && seconds > 0 && seconds <= 8.64e12 ? seconds : null
+}
+
+export function dispatchTiming(flight) {
+  const times = flight?.times
+  return {
+    etd: plannedTime(times, "est_out") ?? plannedTime(times, "sched_out"),
+    eta: plannedTime(times, "est_in") ?? plannedTime(times, "sched_in"),
+    ete: plannedTime(times, "est_time_enroute"),
+  }
+}
+
+export function enrouteDuration(seconds) {
+  if (seconds == null) return null
+  const minutes = Math.floor(seconds / 60)
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+}
+
 // Ported from IJV dispatch get_filtered_notams: rank operationally urgent NOTAMs first, keep all of them
 const urgentNotamWords = ["CLSD", "CLOSED", "U/S", "UNSERVICEABLE", "DANGER", "RESTRICTED", "RWY", "RUNWAY", "ILS", "GNSS", "GPS"]
 

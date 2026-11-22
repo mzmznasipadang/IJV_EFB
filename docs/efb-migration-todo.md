@@ -30,7 +30,12 @@ Use the [reference IJV Crew EFB](https://efb.indonesiajourneyvirtual.site/) as a
 - [x] Enable the Diversion tile. Show candidate airports on the OpenAIP map and rank them using runway suitability, weather, distance, and estimated fuel on landing.
 - [x] Show the basis for the ranking and label any fallback position or fuel estimate explicitly.
 
+## 5. Electronic loadsheet
+
+- [x] Show SimBrief ETD, ETA and airborne ETE in the Flight Folder.
+- [x] Reload SimBrief after sign-in and send the planned loadsheet over Hoppie after 30 seconds when opted in.
+- [x] Preview the CDU-style loadsheet and send the planned or crew-entered weights manually.
+
 ## Later candidates
 
-- [ ] Electronic loadsheet, including its link to OFP actual weights.
 - [ ] Vertical flight profile on the Map using Navlog altitude and distance.

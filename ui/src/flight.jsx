@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { sendTelex, validCallsign } from "./acars"
+import { hasLoadsheetActuals, loadsheetText } from "./loadsheet"
 import { OfpDocument, PilotEntries } from "./ofp"
 import { briefingText, cfpText, releaseText } from "./ofp-text"
 import { PageBanner } from "./page-banner"
 import { FlightWeather, Release } from "./release"
 import { Notams } from "./tools"
-import { dispatchId, dispatchPdfUrl, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
+import { dispatchId, dispatchPdfUrl, dispatchTiming, enrouteDuration, field, flightAircraft, flightNumber, importDispatch, newDispatchTelex, notamTelex, ofpTelex, oooiTimes, routeSigmets, sigmetId, sigmetTelex } from "./dispatch"
 
 // Tabs of the OFP (as on the IJV EFB /ofp/ page) that show the pilot entries checklist
 export const ofpViews = ["brief-text", "release", "ofp", "notams", "weather"]
@@ -46,16 +48,6 @@ function ImportForm({ username, setUsername, onImport, busy, error, hasFlight })
   </form>
 }
 
-async function sendTelex(to, text) {
-  const response = await fetch("/ops/index.php?hoppie=1", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, text }),
-    signal: AbortSignal.timeout(20000),
-  })
-  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "Hoppie ACARS is unavailable.")
-}
-
 async function weatherTelex(airports) {
   const lines = await Promise.all(airports.map(async ({ code }) => {
     const get = type => fetch(`/ops/index.php?${new URLSearchParams({ proxy_weather: "1", type, icao: code })}`, { signal: AbortSignal.timeout(20000) })
@@ -66,11 +58,43 @@ async function weatherTelex(airports) {
   return `IJV OPS WX ${lines.join(" ")}`.slice(0, 1500)
 }
 
+function Loadsheet({ flight, release, send, ready, busy, autoPending }) {
+  const [showActuals, setShowActuals] = useState(false)
+  const actualsAvailable = hasLoadsheetActuals(release)
+  const actual = actualsAvailable && showActuals
+  const text = loadsheetText(flight, actual ? release : undefined)
+  const label = actual ? "Crew loadsheet" : "Planned loadsheet"
+  return <section className="border-t border-border px-4 py-4" aria-label="Loadsheet">
+    <h3 className="section-title">Loadsheet</h3>
+    <div className="mt-3 flex flex-wrap items-start gap-x-6 gap-y-4">
+      <pre className="max-w-full overflow-x-auto rounded-md border border-border bg-muted px-4 py-3 font-mono text-sm leading-relaxed text-foreground">{text}</pre>
+      <div className="min-w-0 space-y-3">
+        {actualsAvailable && <Button className="touch-control" variant="outline" onClick={() => setShowActuals(!actual)}>
+          {actual ? "Preview planned weights" : "Preview crew weights"}
+        </Button>}
+        {send && <div>
+          <Button className="touch-control" variant="outline" disabled={!ready || autoPending}
+            onClick={() => send(label, () => text, true)}>
+            <Send />{busy === label ? "Sending…" : `Send ${label.toLowerCase()}`}
+          </Button>
+        </div>}
+        <p className="secondary-copy max-w-xs text-xs">{actualsAvailable
+          ? "Crew loadsheets include entered ZFW, TOW, and ramp fuel. Landing weight is still estimated."
+          : "Enter ZFW, TOW, and ramp fuel in Dispatch Release to preview crew weights."}</p>
+        <p className="secondary-copy max-w-xs text-xs">TOB and %MAC are unavailable in the imported dispatch.</p>
+      </div>
+    </div>
+  </section>
+}
+
+function DispatchLoadsheet({ flight, release }) {
+  return <div className="panel order-4 min-w-0 overflow-hidden lg:col-span-2"><Loadsheet flight={flight} release={release} /></div>
+}
+
 // shortcut: SIGWX checks only run while this EFB tab is open; move them into the poller if crews need them with the tab closed
 const sigwxInterval = 10 * 60 * 1000
-const validCallsign = callsign => /^[A-Z0-9]{3,8}$/.test(callsign)
 
-function AcarsPanel({ flight, airports }) {
+function AcarsPanel({ flight, airports, release, autoLoadsheetPending }) {
   const flightKey = dispatchId(flight)
   const storageKey = `ijv-efb-sigwx:${flightKey}`
   const [typedCallsign, setTypedCallsign] = useState(() => (field(flight.atc, "callsign") || flightNumber(flight) || "").toUpperCase())
@@ -85,11 +109,11 @@ function AcarsPanel({ flight, airports }) {
   const [status, setStatus] = useState("")
   const [busy, setBusy] = useState("")
 
-  async function send(label, build) {
+  async function send(label, build, multiline = false) {
     setBusy(label)
     try {
-      await sendTelex(callsign, await build())
-      setStatus(`${label} sent to ${callsign} · ${new Date().toISOString().slice(11, 16)}Z`)
+      await sendTelex(callsign, await build(), { multiline })
+      setStatus(`Hoppie accepted ${label.toLowerCase()} for ${callsign} · ${new Date().toISOString().slice(11, 16)}Z`)
     } catch (error) {
       setStatus(error.name === "TimeoutError" ? "Request timed out." : error.message)
     } finally {
@@ -167,6 +191,7 @@ function AcarsPanel({ flight, airports }) {
       </Button>)}
     </div>
     <p className="secondary-copy px-4 pb-2 text-xs" role="status">{status || "Use the callsign you logged on to Hoppie in the aircraft. SIGWX is checked every 10 minutes while this tab is open. Send \"WX WIII\" to IJVOPS from the aircraft for METAR/TAF."}</p>
+    <Loadsheet flight={flight} release={release} send={send} ready={ready} busy={busy} autoPending={autoLoadsheetPending} />
     <dl className="grid grid-cols-4 gap-px border-t bg-border">
       {["OUT", "OFF", "ON", "IN"].map(event => <div key={event} className="bg-card px-4 py-2">
         <dt className="text-xs font-medium text-muted-foreground">{event}</dt>
@@ -179,15 +204,15 @@ function AcarsPanel({ flight, airports }) {
     {flightLog.length > 0 && <ol className="max-h-64 divide-y overflow-y-auto border-t" aria-label="ACARS messages">
       {flightLog.slice().reverse().map((entry, index) => <li key={index} className="flex gap-3 px-4 py-2 font-mono text-xs">
         <span className="shrink-0 text-muted-foreground">{new Date(entry.time * 1000).toISOString().slice(11, 16)}Z {entry.dir === "up" ? "▲" : "▼"} {entry.type}</span>
-        <span className="min-w-0 break-words">{entry.text}</span>
+        <span className="min-w-0 whitespace-pre-wrap break-words">{entry.text}</span>
       </li>)}
     </ol>}
   </section>
 }
 
-export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars, openAipAvailable, navlogEntries, updateNavlogEntry }) {
+export function FlightFolder({ flight, setFlight, airports, openWeather, openCharts, view, setView, simbriefId, acars, openAipAvailable, navlogEntries, updateNavlogEntry, onManualImport, autoLoadsheetPending }) {
   const [username, setUsername] = useState(simbriefId || "")
-  const [dispatchUsername, setDispatchUsername] = useState("")
+  const [dispatchUsername, setDispatchUsername] = useState(simbriefId || "")
   const [importOpen, setImportOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -197,6 +222,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
   async function onImport(event) {
     event.preventDefault()
     if (!username.trim() || busy) return
+    onManualImport()
     setBusy(true)
     setError("")
     try {
@@ -271,6 +297,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
   const destination = field(flight?.destination, "icao_code")
   const fuel = field(flight?.fuel, "plan_ramp")
   const units = field(flight?.params, "units")
+  const timing = dispatchTiming(flight)
   const pdfUrl = dispatchPdfUrl(flight)
   const customPdfAvailable = /^(kgs?|lbs?)$/i.test(units ?? "")
   const alternates = airports.filter(item => item.role === "Alternate").map(item => item.code)
@@ -322,12 +349,12 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
               <Plane className="size-4 text-route-muted" /><h2 className="section-title">Flight route</h2>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3 px-4 py-5 sm:px-5 sm:py-6">
-              {[[origin, flight.origin, "Departure", "est_out"], [destination, flight.destination, "Destination", "est_in"]].map(([code, airport, role, time], index) =>
+              {[[origin, flight.origin, "Departure", "ETD", timing.etd], [destination, flight.destination, "Destination", "ETA", timing.eta]].map(([code, airport, role, label, time], index) =>
                 <div key={role} className={index === 1 ? "col-start-3 row-start-1 text-right" : ""}>
                   <p className="text-xs font-medium text-route-muted">{role}</p>
                   <p className="mt-1 font-mono text-3xl font-semibold tracking-tight sm:text-4xl">{code}</p>
                   <p className="mt-1 text-sm leading-snug text-route-muted">{field(airport, "name")}</p>
-                  <p className="mt-2 font-mono text-sm text-route-foreground">{utc(field(flight.times, time))}</p>
+                  <p className="mt-2 font-mono text-sm text-route-foreground">{label} {utc(time)}</p>
                 </div>)}
               <div className="col-start-2 row-start-1 mt-7 flex items-center gap-1.5 text-route-muted sm:gap-2" aria-hidden="true">
                 <span className="hidden h-px w-8 bg-route-muted/60 sm:block xl:w-16" /><ArrowRight className="size-5" /><span className="hidden h-px w-8 bg-route-muted/60 sm:block xl:w-16" />
@@ -343,6 +370,7 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
               <div className="min-w-0 bg-card px-4 py-3"><dt className="text-xs font-medium text-muted-foreground">Flight</dt><dd className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold"><span className="font-mono">{flightNumber(flight) || "—"}</span>{flightAircraft(flight) && <Badge variant="secondary">{flightAircraft(flight)}</Badge>}</dd></div>
               <div className="min-w-0 bg-card px-4 py-3"><dt className="text-xs font-medium text-muted-foreground">Dispatch time</dt><dd className="mt-1 break-words font-mono text-sm"><time>{utc(field(flight.params, "time_generated"), true)}</time></dd></div>
               <div className="min-w-0 bg-card px-4 py-3"><dt className="text-xs font-medium text-muted-foreground">Block fuel</dt><dd className="mt-1 font-mono text-sm font-semibold text-data-accent">{blockFuel}</dd></div>
+              <div className="min-w-0 bg-card px-4 py-3"><dt className="text-xs font-medium text-muted-foreground">ETE (airborne)</dt><dd className="mt-1 font-mono text-sm font-semibold">{enrouteDuration(timing.ete) ?? "—"}</dd></div>
               <div className="min-w-0 bg-card px-4 py-3"><dt className="text-xs font-medium text-muted-foreground">Alternates</dt><dd className="mt-1 break-words font-mono text-sm font-semibold">{alternates.join(" / ") || "—"}</dd></div>
             </dl>
           </section>
@@ -358,7 +386,9 @@ export function FlightFolder({ flight, setFlight, airports, openWeather, openCha
               </li>)}
             </ul>
           </section>
-          {acars && <AcarsPanel key={dispatchId(flight)} flight={flight} airports={airports} />}
+          {acars
+            ? <AcarsPanel key={dispatchId(flight)} flight={flight} airports={airports} release={navlogEntries.release} autoLoadsheetPending={autoLoadsheetPending} />
+            : <DispatchLoadsheet key={dispatchId(flight)} flight={flight} release={navlogEntries.release} />}
         </div>
       </TabsContent>
       {ofpViews.includes(view) && <div className="mt-3"><PilotEntries release={navlogEntries.release} openEntry={openReleaseEntry} /></div>}

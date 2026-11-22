@@ -83,6 +83,7 @@ if (isset($_GET['code']) || isset($_GET['error'])) {
             $_SESSION['pilot_name'] = $name !== '' ? $name : $callsign;
             $_SESSION['pilot_callsign'] = $callsign;
             $_SESSION['authenticated'] = true;
+            $_SESSION['fresh_login'] = true;
             header('Location: /ops/index.php', true, 303);
             exit;
         }
