@@ -17,7 +17,7 @@ Live at [efb.ijvirtual.org](https://efb.ijvirtual.org).
   - **One-tap uplinks:** weather, OFP summary, NOTAM digest and a "new dispatch issued" notice.
   - **Loadsheet:** after a new vAMSYS login with a SimBrief ID, the EFB reloads the flight plan. With Hoppie enabled, the open EFB tab waits 30 seconds after import, then sends the planned loadsheet once per dispatch and callsign in that browser. A page refresh does not trigger another automatic import or send.
   - **Manual loadsheet:** preview and send planned weights, or enter ZFW, TOW and ramp fuel in Dispatch Release to preview and send crew weights. TOB and %MAC are marked unavailable rather than inferred.
-  - **Cockpit format:** a 737-family SimBrief aircraft code selects the multiline CDU loadsheet, starting with flight/date and the TOB, ZFW and %MAC rows. Other aircraft get compact `LABEL:VALUE` telex. The EFB keeps the aligned preview for both.
+  - **Cockpit format:** Hoppie loadsheets use compact `LABEL:VALUE` text, including for LevelUp/Zibo 737s, which reflow multiline telex. The EFB keeps the aligned preview.
   - **OOOI times:** OUT, OFF, ON and IN times are read from the crew's downlinks.
   - **Request poller:** the `hoppie-poller` container answers `WX`, `METAR` and `TAF` telexes sent to the ops station with a METAR and TAF.
 

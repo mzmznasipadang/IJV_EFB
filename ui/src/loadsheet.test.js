@@ -50,23 +50,15 @@ test("crew cockpit telex uses crew weights and labels the remaining planned valu
     "IJV CREW LOADSHEET GA324 CGK-WARR LBS ZFW:55000 TOW:61500 ELDW:58200 RAMP:5500 PLN-PAX:0 ETD:2355Z ETA:0125Z ETE:01:10")
 })
 
-test("737 loadsheets send the reference row order within CDU width", async t => {
+test("737 sends compact telex while retaining the aligned EFB preview", async t => {
   const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ ok: true }))
-  for (const type of ["B738", "B38M"]) {
-    const text = loadsheetTelex({ ...flight, aircraft: { icaocode: type } })
-    const lines = text.split("\n")
-    assert.deepEqual(lines.slice(0, 9), [
-      "LOADSHEET 26OCT26", "2000Z  E1  LBS", "GA324/26 CGK WARR",
-      "TOB          N/A", "ZFW          56146", "MACZFW       N/A", "MACTOW       N/A",
-      "------------------------", "PLANNED WEIGHTS",
-    ])
-    assert.ok(lines.every(line => line.length <= 24))
-    await sendTelex("GIA324", text, { multiline: true })
-    assert.deepEqual(JSON.parse(fetch.mock.calls.at(-1).arguments[1].body), { to: "GIA324", text, multiline: true })
-  }
-  const text = loadsheetTelex({ ...flight, aircraft: { icao_code: "B77W" } })
-  await sendTelex("GIA324", text, { multiline: true })
-  assert.deepEqual(JSON.parse(fetch.mock.calls.at(-1).arguments[1].body), { to: "GIA324", text })
+  const plan = { ...flight, aircraft: { icaocode: "B738" }, atc: { callsign: "GIA324" } }
+  await sendTelex("GIA324", loadsheetTelex(plan))
+  assert.deepEqual(JSON.parse(fetch.mock.calls[0].arguments[1].body), {
+    to: "GIA324",
+    text: "IJV PLANNED LOADSHEET GIA324 CGK-WARR LBS ZFW:56146 TOW:62000 LDW:58200 RAMP:6000 PAX:0 ETD:2355Z ETA:0125Z ETE:01:10",
+  })
+  assert.match(loadsheetText(plan), /^TOB +N\/A\nZFW +56146\nMACZFW +N\/A\nMACTOW +N\/A$/m)
 })
 
 test("live SimBrief v2 timestamps and durations survive import and cached loadsheet rendering", async t => {

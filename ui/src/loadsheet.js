@@ -1,4 +1,4 @@
-import { dispatchFuelUnit, dispatchTiming, enrouteDuration, field, flightAircraft, flightNumber } from "./dispatch.js"
+import { dispatchFuelUnit, dispatchTiming, enrouteDuration, field, flightNumber } from "./dispatch.js"
 
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 const identifier = value => String(value ?? "").toUpperCase().replace(/[^A-Z0-9-]/g, "")
@@ -41,26 +41,21 @@ function loadsheetData(flight, release) {
 }
 
 export function loadsheetText(flight, release) {
-  return formattedLoadsheet(flight, loadsheetData(flight, release))
-}
-
-function formattedLoadsheet(flight, data, boeing = false) {
+  const data = loadsheetData(flight, release)
   const issued = utcParts(field(flight.params, "time_generated"))
   const number = identifier(flightNumber(flight) || field(flight.atc, "callsign")) || "N/A"
   const revision = identifier(field(flight.general, "release"))
   const row = (label, value) => `${label.padEnd(13)}${value ?? "N/A"}`
-  const status = data.actual ? "CREW ACTUAL WEIGHTS" : "PLANNED WEIGHTS"
   return [
     `LOADSHEET ${issued?.date ?? "-------"}`,
     `${issued?.time ?? "-----"}${revision ? `  E${revision}` : ""}  ${data.units ?? "UNITS N/A"}`,
     `${number}/${data.departure?.day ?? "--"} ${data.origin || "N/A"} ${data.destination || "N/A"}`,
-    ...(!boeing ? [status] : []),
+    data.actual ? "CREW ACTUAL WEIGHTS" : "PLANNED WEIGHTS",
     row("TOB", "N/A"),
     row("ZFW", data.zfw),
     row("MACZFW", "N/A"),
     row("MACTOW", "N/A"),
     "------------------------",
-    ...(boeing ? [status] : []),
     row("PAX (PLN)", data.pax),
     row("TOW", data.tow),
     row("EST LDW", data.ldw),
@@ -76,8 +71,6 @@ function formattedLoadsheet(flight, data, boeing = false) {
 // Cockpit telex clients reflow whitespace. Keep each label and value in one word.
 export function loadsheetTelex(flight, release) {
   const data = loadsheetData(flight, release)
-  // The reference 737 page puts TOB/ZFW/MAC before the divider and detailed weights.
-  if (/^(?:B73[1-9]|B3[789X]M)$/i.test(flightAircraft(flight) ?? "")) return formattedLoadsheet(flight, data, true)
   const callsign = identifier(field(flight.atc, "callsign") || flightNumber(flight)) || "FLIGHT-NA"
   const plan = data.actual ? "PLN-" : ""
   const fields = [
