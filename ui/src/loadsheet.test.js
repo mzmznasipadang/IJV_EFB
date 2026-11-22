@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
+import { sendTelex } from "./acars.js"
 import { dispatchTiming, enrouteDuration, importDispatch, loadDispatch } from "./dispatch.js"
 import { loadsheetText, loadsheetTelex } from "./loadsheet.js"
 
@@ -40,13 +41,32 @@ test("crew loadsheet only uses complete actuals and does not relabel estimated l
 })
 
 test("planned cockpit telex keeps each field together without padding or unavailable values", () => {
-  assert.equal(loadsheetTelex({ ...flight, atc: { callsign: "GIA324" } }),
+  assert.equal(loadsheetTelex({ ...flight, aircraft: { icao_code: "A20N" }, atc: { callsign: "GIA324" } }),
     "IJV PLANNED LOADSHEET GIA324 CGK-WARR LBS ZFW:56146 TOW:62000 LDW:58200 RAMP:6000 PAX:0 ETD:2355Z ETA:0125Z ETE:01:10")
 })
 
 test("crew cockpit telex uses crew weights and labels the remaining planned values", () => {
   assert.equal(loadsheetTelex(flight, { zfw: 55000, tow: 61500, ramp: 5500 }),
     "IJV CREW LOADSHEET GA324 CGK-WARR LBS ZFW:55000 TOW:61500 ELDW:58200 RAMP:5500 PLN-PAX:0 ETD:2355Z ETA:0125Z ETE:01:10")
+})
+
+test("737 loadsheets send the reference row order within CDU width", async t => {
+  const fetch = t.mock.method(globalThis, "fetch", async () => Response.json({ ok: true }))
+  for (const type of ["B738", "B38M"]) {
+    const text = loadsheetTelex({ ...flight, aircraft: { icaocode: type } })
+    const lines = text.split("\n")
+    assert.deepEqual(lines.slice(0, 9), [
+      "LOADSHEET 26OCT26", "2000Z  E1  LBS", "GA324/26 CGK WARR",
+      "TOB          N/A", "ZFW          56146", "MACZFW       N/A", "MACTOW       N/A",
+      "------------------------", "PLANNED WEIGHTS",
+    ])
+    assert.ok(lines.every(line => line.length <= 24))
+    await sendTelex("GIA324", text, { multiline: true })
+    assert.deepEqual(JSON.parse(fetch.mock.calls.at(-1).arguments[1].body), { to: "GIA324", text, multiline: true })
+  }
+  const text = loadsheetTelex({ ...flight, aircraft: { icao_code: "B77W" } })
+  await sendTelex("GIA324", text, { multiline: true })
+  assert.deepEqual(JSON.parse(fetch.mock.calls.at(-1).arguments[1].body), { to: "GIA324", text })
 })
 
 test("live SimBrief v2 timestamps and durations survive import and cached loadsheet rendering", async t => {

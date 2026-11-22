@@ -74,7 +74,7 @@ function Loadsheet({ flight, release, send, ready, busy, autoPending }) {
         </Button>}
         {send && <div>
           <Button className="touch-control" variant="outline" disabled={!ready || autoPending}
-            onClick={() => send(label, () => loadsheetTelex(flight, actual ? release : undefined))}>
+            onClick={() => send(label, () => loadsheetTelex(flight, actual ? release : undefined), { multiline: true })}>
             <Send />{busy === label ? "Sending…" : `Send ${label.toLowerCase()}`}
           </Button>
         </div>}
@@ -109,10 +109,10 @@ function AcarsPanel({ flight, airports, release, autoLoadsheetPending }) {
   const [status, setStatus] = useState("")
   const [busy, setBusy] = useState("")
 
-  async function send(label, build) {
+  async function send(label, build, options) {
     setBusy(label)
     try {
-      await sendTelex(callsign, await build())
+      await sendTelex(callsign, await build(), options)
       setStatus(`Hoppie accepted ${label.toLowerCase()} for ${callsign} · ${new Date().toISOString().slice(11, 16)}Z`)
     } catch (error) {
       setStatus(error.name === "TimeoutError" ? "Request timed out." : error.message)

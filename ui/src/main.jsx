@@ -248,7 +248,7 @@ function App() {
           signal.throwIfAborted()
           if (alreadySent()) return finish(`Planned loadsheet already sent to ${to}.`)
           setStartup({ text: `Sending planned loadsheet to ${to}…`, sending: true })
-          await sendTelex(to, loadsheetTelex(latest), { signal })
+          await sendTelex(to, loadsheetTelex(latest), { multiline: true, signal })
           try { localStorage.setItem(sentKey, "1") } catch {}
           finish(`Hoppie accepted the planned loadsheet for ${to}.`)
         }

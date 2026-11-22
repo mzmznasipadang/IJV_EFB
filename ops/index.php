@@ -129,8 +129,11 @@ if (isset($_GET['hoppie'])) {
     }
     $body = json_decode(file_get_contents('php://input', false, null, 0, 8192), true);
     $to = strtoupper(trim((string)($body['to'] ?? '')));
-    $text = strtoupper(trim(preg_replace('/\s+/', ' ', (string)($body['text'] ?? ''))));
-    if (!acars_log_file($to) || !preg_match('/^[\x20-\x7E]{1,1500}$/D', $text)) {
+    $packet = (string)($body['text'] ?? '');
+    $multiline = ($body['multiline'] ?? false) === true;
+    $text = strtoupper(trim($multiline ? str_replace(["\r\n", "\r"], "\n", $packet) : preg_replace('/\s+/', ' ', $packet)));
+    $format = $multiline ? '/^[\x20-\x7E\n]{1,1500}\z/' : '/^[\x20-\x7E]{1,1500}\z/';
+    if (!acars_log_file($to) || !preg_match($format, $text)) {
         http_response_code(400);
         exit(json_encode(['error' => 'Invalid callsign or message.']));
     }
